@@ -41,11 +41,14 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function commandAcknowledgedFromDevice(value: unknown): boolean {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    (value as { runtimeState?: { commandAcknowledged?: unknown } }).runtimeState?.commandAcknowledged === true
-  );
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const directRuntime = (value as { runtimeState?: { commandAcknowledged?: unknown } }).runtimeState;
+  const nestedRuntime = (value as { device?: { runtimeState?: { commandAcknowledged?: unknown } } }).device?.runtimeState;
+
+  return directRuntime?.commandAcknowledged === true || nestedRuntime?.commandAcknowledged === true;
 }
 
 function waitForAcknowledgement(deviceId: string, timeoutMs = 45000): Promise<CommandStatus> {

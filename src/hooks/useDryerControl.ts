@@ -51,7 +51,7 @@ function commandAcknowledgedFromDevice(value: unknown): boolean {
   return directRuntime?.commandAcknowledged === true || nestedRuntime?.commandAcknowledged === true;
 }
 
-function waitForAcknowledgement(deviceId: string, timeoutMs = 45000): Promise<CommandStatus> {
+function waitForAcknowledgement(deviceId: string, timeoutMs = 120000): Promise<CommandStatus> {
   return new Promise((resolve) => {
     let settled = false;
     let pollInterval: ReturnType<typeof setInterval> | null = null;

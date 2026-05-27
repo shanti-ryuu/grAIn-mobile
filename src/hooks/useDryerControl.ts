@@ -40,32 +40,65 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
-function waitForAcknowledgement(deviceId: string, timeoutMs = 15000): Promise<CommandStatus> {
+function commandAcknowledgedFromDevice(value: unknown): boolean {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    (value as { runtimeState?: { commandAcknowledged?: unknown } }).runtimeState?.commandAcknowledged === true
+  );
+}
+
+function waitForAcknowledgement(deviceId: string, timeoutMs = 45000): Promise<CommandStatus> {
   return new Promise((resolve) => {
-    if (!db) {
-      resolve("sent");
-      return;
-    }
-
-    const runtimeRef = ref(db, `grain/devices/${deviceId}/runtimeState`);
     let settled = false;
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
 
-    const timeout = setTimeout(() => {
+    const settle = (status: CommandStatus) => {
       if (settled) {
         return;
       }
       settled = true;
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+      resolve(status);
+    };
+
+    if (!db) {
+      pollInterval = setInterval(() => {
+        void grainApi.devices.getById(deviceId).then((device) => {
+          if (commandAcknowledgedFromDevice(device)) {
+            settle("confirmed");
+          }
+        }).catch(() => undefined);
+      }, 2000);
+      setTimeout(() => settle("timeout"), timeoutMs);
+      return;
+    }
+
+    const runtimeRef = ref(db, `grain/devices/${deviceId}/runtimeState`);
+
+    const timeout = setTimeout(() => {
       off(runtimeRef);
-      resolve("timeout");
+      settle("timeout");
     }, timeoutMs);
+
+    pollInterval = setInterval(() => {
+      void grainApi.devices.getById(deviceId).then((device) => {
+        if (commandAcknowledgedFromDevice(device)) {
+          clearTimeout(timeout);
+          off(runtimeRef);
+          settle("confirmed");
+        }
+      }).catch(() => undefined);
+    }, 2000);
 
     onValue(runtimeRef, (snapshot) => {
       const value = snapshot.val() as { commandAcknowledged?: boolean } | null;
       if (!settled && value?.commandAcknowledged === true) {
-        settled = true;
         clearTimeout(timeout);
         off(runtimeRef);
-        resolve("confirmed");
+        settle("confirmed");
       }
     });
   });

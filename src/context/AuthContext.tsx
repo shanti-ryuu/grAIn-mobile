@@ -116,17 +116,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const bootstrap = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    const token = await SecureStore.getItemAsync(GRAIN_TOKEN_KEY);
-
-    if (!token) {
-      setUser(null);
-      setIsAuthenticated(false);
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      const currentUser = await retryMe(3, 5000);
+      const token = await SecureStore.getItemAsync(GRAIN_TOKEN_KEY);
+
+      if (!token) {
+        setUser(null);
+        setIsAuthenticated(false);
+        return;
+      }
+
+      const currentUser = await retryMe(2, 2500);
       setUser(currentUser);
       setIsAuthenticated(true);
     } catch (bootstrapError) {
@@ -135,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setIsAuthenticated(false);
       } else {
+        // Keep the app usable even when token restore can't reach the server.
         setIsAuthenticated(true);
         setError("Server is reconnecting. You can keep using cached access.");
         startBackgroundRetry();

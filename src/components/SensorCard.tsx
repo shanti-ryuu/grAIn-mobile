@@ -19,6 +19,7 @@ type SensorCardProps = {
   value: string | number;
   unit: string;
   color?: string;
+  secondaryLabel?: string;
 };
 
 function gradientForLabel(label: string, isDark: boolean): readonly [string, string] {
@@ -45,7 +46,7 @@ function numericValue(value: string | number): number {
   return typeof value === "number" ? value : Number(value.replace(/[^\d.-]/g, ""));
 }
 
-export function SensorCard({ icon, label, value, unit, color }: SensorCardProps) {
+export function SensorCard({ icon, label, value, unit, color, secondaryLabel }: SensorCardProps) {
   const { theme, isDark } = useTheme();
   const scale = useSharedValue(1);
   const parsed = numericValue(value);
@@ -74,6 +75,7 @@ export function SensorCard({ icon, label, value, unit, color }: SensorCardProps)
         <Animated.Text style={[styles.value, { color: theme.textPrimary }, valueStyle]}>{value}</Animated.Text>
         <Text style={[styles.unit, { color: theme.textTertiary }]}>{unit}</Text>
       </View>
+      {secondaryLabel ? <Text style={[styles.secondaryLabel, { color: theme.textSecondary }]}>{secondaryLabel}</Text> : null}
       <View style={[styles.thresholdTrack, { backgroundColor: theme.bgElevated }]}>
         <View
           style={[
@@ -103,6 +105,11 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: "600",
+  },
+  secondaryLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: -2,
   },
   valueRow: {
     alignItems: "flex-end",

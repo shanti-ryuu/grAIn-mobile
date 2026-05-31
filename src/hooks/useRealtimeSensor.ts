@@ -1,4 +1,4 @@
-import { off, onValue, ref } from "firebase/database";
+import { onValue, ref } from "firebase/database";
 import { useEffect, useState } from "react";
 
 import { db } from "@/lib/firebase";
@@ -22,10 +22,73 @@ export interface RealtimeSensorData {
 export type RuntimeState = Record<string, string | number | boolean | null | undefined>;
 
 interface UseRealtimeSensorResult {
-  sensorData: RealtimeSensorData | null;
-  runtimeState: RuntimeState | null;
-  isOnline: "online" | "offline";
+  sensorData: RealtimeSensorData;
+  runtimeState: RuntimeState;
+  isOnline: boolean | null;
   lastUpdated: string | null;
+}
+
+const DEFAULT_SENSOR_DATA: RealtimeSensorData = {
+  temperature: 0,
+  humidity: 0,
+  moisture: 0,
+  fanSpeed: 0,
+  energy: 0,
+  status: "offline",
+  solarVoltage: 0,
+  solarCurrent: 0,
+  weight: 0,
+  updatedAt: undefined,
+};
+
+const DEFAULT_RUNTIME_STATE: RuntimeState = {
+  fan1State: "OFF",
+  fan2State: "OFF",
+  heaterState: "OFF",
+  relayState: "OFF",
+  stepperState: "OFF",
+  currentMode: "MANUAL",
+  isRunning: false,
+};
+
+function numberOrZero(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function normalizeSensorData(value: unknown): RealtimeSensorData {
+  const data = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
+  return {
+    temperature: numberOrZero(data.temperature),
+    humidity: numberOrZero(data.humidity),
+    moisture: numberOrZero(data.moisture),
+    fanSpeed: numberOrZero(data.fanSpeed),
+    solarVoltage: numberOrZero(data.solarVoltage),
+    solarCurrent: numberOrZero(data.solarCurrent),
+    weight: numberOrZero(data.weight),
+    energy: numberOrZero(data.energy),
+    status: typeof data.status === "string" ? data.status : undefined,
+    updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : undefined,
+  };
+}
+
+function normalizeRuntimeState(value: unknown): RuntimeState {
+  const data = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const stateValue = (nextValue: unknown, fallback: string) =>
+    typeof nextValue === "string" || typeof nextValue === "number" || typeof nextValue === "boolean" || nextValue === null
+      ? nextValue
+      : fallback;
+
+  return {
+    ...DEFAULT_RUNTIME_STATE,
+    fan1State: stateValue(data.fan1State, "OFF"),
+    fan2State: stateValue(data.fan2State, "OFF"),
+    heaterState: stateValue(data.heaterState, "OFF"),
+    relayState: stateValue(data.relayState, "OFF"),
+    stepperState: stateValue(data.stepperState, "OFF"),
+    currentMode: stateValue(data.currentMode, "MANUAL"),
+    isRunning: data.isRunning === true,
+  };
 }
 
 function parseLastActive(value: unknown): number | null {
@@ -50,18 +113,26 @@ function deriveOnlineStatus(
   status: unknown,
   lastActiveMs: number | null,
   nowMs: number
-): "online" | "offline" {
-  const ageMs = lastActiveMs === null ? Number.POSITIVE_INFINITY : nowMs - lastActiveMs;
-  if (ageMs <= RECENT_ACTIVITY_GRACE_MS) {
-    return "online";
+): boolean | null {
+  if (status === "online" || status === "offline") {
+    return status === "online";
   }
 
-  return status === "online" && ageMs <= OFFLINE_AFTER_MS ? "online" : "offline";
+  if (status !== "online" && status !== "offline" && lastActiveMs === null) {
+    return null;
+  }
+
+  const ageMs = lastActiveMs === null ? Number.POSITIVE_INFINITY : nowMs - lastActiveMs;
+  if (ageMs <= RECENT_ACTIVITY_GRACE_MS) {
+    return true;
+  }
+
+  return status === "online" && ageMs <= OFFLINE_AFTER_MS;
 }
 
-export function useRealtimeSensor(deviceId: string): UseRealtimeSensorResult {
-  const [sensorData, setSensorData] = useState<RealtimeSensorData | null>(null);
-  const [runtimeState, setRuntimeState] = useState<RuntimeState | null>(null);
+export function useRealtimeSensor(deviceId?: string | null): UseRealtimeSensorResult {
+  const [sensorData, setSensorData] = useState<RealtimeSensorData>(DEFAULT_SENSOR_DATA);
+  const [runtimeState, setRuntimeState] = useState<RuntimeState>(DEFAULT_RUNTIME_STATE);
   const [firebaseStatus, setFirebaseStatus] = useState<unknown>(null);
   const [lastActiveMs, setLastActiveMs] = useState<number | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -69,7 +140,13 @@ export function useRealtimeSensor(deviceId: string): UseRealtimeSensorResult {
   const isOnline = deriveOnlineStatus(firebaseStatus, lastActiveMs, nowMs);
 
   useEffect(() => {
+    console.log("[useRealtimeSensor] deviceId:", deviceId);
     if (!deviceId || !db) {
+      setSensorData(DEFAULT_SENSOR_DATA);
+      setRuntimeState(DEFAULT_RUNTIME_STATE);
+      setFirebaseStatus(null);
+      setLastActiveMs(null);
+      setLastUpdated(null);
       return;
     }
 
@@ -78,23 +155,24 @@ export function useRealtimeSensor(deviceId: string): UseRealtimeSensorResult {
     const runtimeRef = ref(db, `grain/devices/${deviceId}/runtimeState`);
     const lastActiveRef = ref(db, `grain/devices/${deviceId}/lastActive`);
 
-    onValue(sensorRef, (snapshot) => {
-      const value = snapshot.val() as RealtimeSensorData | null;
+    const unsubscribeSensor = onValue(sensorRef, (snapshot) => {
+      console.log("[useRealtimeSensor] sensors snapshot:", snapshot.val());
+      const value = normalizeSensorData(snapshot.val());
       setSensorData(value);
       if (value?.updatedAt) {
         setLastUpdated(value.updatedAt);
       }
     });
 
-    onValue(statusRef, (snapshot) => {
+    const unsubscribeStatus = onValue(statusRef, (snapshot) => {
       setFirebaseStatus(snapshot.val());
     });
 
-    onValue(runtimeRef, (snapshot) => {
-      setRuntimeState(snapshot.val() as RuntimeState | null);
+    const unsubscribeRuntime = onValue(runtimeRef, (snapshot) => {
+      setRuntimeState(normalizeRuntimeState(snapshot.val()));
     });
 
-    onValue(lastActiveRef, (snapshot) => {
+    const unsubscribeLastActive = onValue(lastActiveRef, (snapshot) => {
       const value = snapshot.val();
       const parsed = parseLastActive(value);
       setLastActiveMs(parsed);
@@ -102,10 +180,10 @@ export function useRealtimeSensor(deviceId: string): UseRealtimeSensorResult {
     });
 
     return () => {
-      off(sensorRef);
-      off(statusRef);
-      off(runtimeRef);
-      off(lastActiveRef);
+      unsubscribeSensor();
+      unsubscribeStatus();
+      unsubscribeRuntime();
+      unsubscribeLastActive();
     };
   }, [deviceId]);
 

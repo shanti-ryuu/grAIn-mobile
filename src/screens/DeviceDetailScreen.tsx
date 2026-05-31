@@ -25,6 +25,7 @@ import { useSensorData } from "@/hooks/useSensorData";
 import { chartConfig, sparseClockLabels, uniqueChronologicalPoints } from "@/utils/chart";
 import { COLORS, SENSOR_THRESHOLDS, SPACING } from "@/utils/constants";
 import { getListData, relativeTime, sessionProgress } from "@/utils/data";
+import { formatWeight } from "@/utils/formatters";
 import { useBottomTabPadding } from "@/utils/layout";
 
 function valueOrFallback(value: unknown, fallback = 0): number {
@@ -120,6 +121,7 @@ export function DeviceDetailScreen() {
   const fanSpeed = valueOrFallback(liveSensorData?.fanSpeed);
   const solarVoltage = valueOrFallback(liveSensorData?.solarVoltage);
   const weight = valueOrFallback(liveSensorData?.weight ?? mergedRuntime?.currentWeight);
+  const status = isOnline ?? (device?.status === "online");
   const isRunning = mergedRuntime?.isRunning === true;
   const heaterState = switchState(mergedRuntime?.heaterState);
   const fan1State = switchState(mergedRuntime?.fan1State);
@@ -151,7 +153,7 @@ export function DeviceDetailScreen() {
           <Text style={[styles.title, { color: theme.textPrimary }]}>{device?.name ?? "Device"}</Text>
           <Text style={[styles.deviceId, { color: theme.textSecondary }]}>{deviceId}</Text>
         </View>
-        <StatusBadge status={isOnline} size="sm" />
+        <StatusBadge status={status ? "online" : "offline"} size="sm" />
       </View>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -190,16 +192,16 @@ export function DeviceDetailScreen() {
           />
         </View>
         <View style={styles.sensorTile}>
-          <SensorCard color={moistureColor(moisture)} icon="leaf" label="Moisture" unit="%" value={displayNumber(moisture)} />
+          <SensorCard color={moistureColor(moisture)} icon="leaf" label="Moisture" unit={moisture > 0 ? "%" : ""} value={moisture > 0 ? displayNumber(moisture) : "—"} />
         </View>
         <View style={styles.sensorTile}>
-          <SensorCard color={COLORS.info} icon="speedometer" label="Fan Speed" unit="%" value={displayNumber(fanSpeed, 0)} />
+          <SensorCard color={COLORS.info} icon="speedometer" label="Fan Speed" unit={fanSpeed > 0 ? "%" : ""} value={fanSpeed > 0 ? displayNumber(fanSpeed, 0) : "—"} />
         </View>
         <View style={styles.sensorTile}>
-          <SensorCard color={COLORS.warning} icon="flash" label="Solar Voltage" unit="V" value={displayNumber(solarVoltage)} />
+          <SensorCard color={COLORS.warning} icon="flash" label="Solar Voltage" unit={solarVoltage > 0 ? "V" : ""} value={solarVoltage > 0 ? displayNumber(solarVoltage) : "—"} />
         </View>
         <View style={styles.sensorTile}>
-          <SensorCard color={COLORS.textSecondary} icon="scale" label="Weight" unit="kg" value={displayNumber(weight)} />
+          <SensorCard color={COLORS.textSecondary} icon="scale" label="Weight" unit="" value={formatWeight(weight)} />
         </View>
       </View>
 

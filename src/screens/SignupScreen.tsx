@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Link, router } from "expo-router";
 import { useState } from "react";
@@ -14,16 +15,14 @@ import {
 
 import { BrandLogo } from "@/components/BrandLogo";
 import { useAuth } from "@/context/AuthContext";
-import { useTutorial } from "@/context/TutorialContext";
 import { COLORS, SPACING } from "@/utils/constants";
 
 export function SignupScreen() {
   const { signup } = useAuth();
-  const { resetFeatureTutorials } = useTutorial();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"admin" | "farmer">("farmer");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -31,9 +30,8 @@ export function SignupScreen() {
     setIsSubmitting(true);
     setError(null);
     try {
-      await signup(name.trim(), email.trim(), password, role);
-      await resetFeatureTutorials();
-      router.replace("/(app)/dashboard");
+      const response = await signup(name.trim(), email.trim(), password);
+      router.push({ pathname: "/verify-otp", params: { email: response.email } } as never);
     } catch (submitError) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setError(submitError instanceof Error ? submitError.message : "Registration failed");
@@ -50,7 +48,13 @@ export function SignupScreen() {
 
       <View style={styles.form}>
         <Text style={styles.label}>Name</Text>
-        <TextInput onChangeText={setName} placeholder="Your name" style={styles.input} value={name} />
+        <TextInput
+          onChangeText={setName}
+          placeholder="Your name"
+          placeholderTextColor={COLORS.textSecondary}
+          style={styles.input}
+          value={name}
+        />
 
         <Text style={styles.label}>Email</Text>
         <TextInput
@@ -58,30 +62,30 @@ export function SignupScreen() {
           keyboardType="email-address"
           onChangeText={setEmail}
           placeholder="farmer@grain.com"
+          placeholderTextColor={COLORS.textSecondary}
           style={styles.input}
           value={email}
         />
 
         <Text style={styles.label}>Password</Text>
-        <TextInput
-          onChangeText={setPassword}
-          placeholder="Minimum 6 characters"
-          secureTextEntry
-          style={styles.input}
-          value={password}
-        />
-
-        <Text style={styles.label}>Role</Text>
-        <View style={styles.roleRow}>
-          {(["farmer", "admin"] as const).map((item) => (
-            <Pressable
-              key={item}
-              onPress={() => setRole(item)}
-              style={[styles.roleButton, role === item && styles.roleButtonActive]}
-            >
-              <Text style={[styles.roleText, role === item && styles.roleTextActive]}>{item}</Text>
-            </Pressable>
-          ))}
+        <View style={styles.passwordField}>
+          <TextInput
+            onChangeText={setPassword}
+            placeholder="Minimum 8 characters with a number"
+            placeholderTextColor={COLORS.textSecondary}
+            secureTextEntry={!passwordVisible}
+            style={[styles.input, styles.passwordInput]}
+            value={password}
+          />
+          <Pressable
+            accessibilityLabel={passwordVisible ? "Hide password" : "Show password"}
+            accessibilityRole="button"
+            hitSlop={10}
+            onPress={() => setPasswordVisible((visible) => !visible)}
+            style={styles.passwordToggle}
+          >
+            <Ionicons color={COLORS.textSecondary} name={passwordVisible ? "eye-off" : "eye"} size={22} />
+          </Pressable>
         </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -119,7 +123,7 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   disabled: {
-    opacity: 0.65,
+    backgroundColor: "#7A9A73",
   },
   error: {
     color: COLORS.danger,
@@ -135,18 +139,20 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   input: {
-    borderColor: COLORS.border,
+    backgroundColor: "#FFFFFF",
+    borderColor: "#CBD5C0",
     borderRadius: 12,
     borderWidth: 1,
     color: COLORS.textPrimary,
     fontSize: 16,
+    fontWeight: "600",
     height: 50,
     paddingHorizontal: SPACING.md,
   },
   label: {
     color: COLORS.textPrimary,
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   link: {
     color: COLORS.primary,
@@ -161,29 +167,20 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     width: 200,
   },
-  roleButton: {
+  passwordField: {
+    height: 50,
+    justifyContent: "center",
+  },
+  passwordInput: {
+    paddingRight: 52,
+  },
+  passwordToggle: {
     alignItems: "center",
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    borderWidth: 1,
-    flex: 1,
-    paddingVertical: 12,
-  },
-  roleButtonActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  roleRow: {
-    flexDirection: "row",
-    gap: SPACING.sm,
-  },
-  roleText: {
-    color: COLORS.textSecondary,
-    fontWeight: "800",
-    textTransform: "capitalize",
-  },
-  roleTextActive: {
-    color: "#FFFFFF",
+    height: 50,
+    justifyContent: "center",
+    position: "absolute",
+    right: 0,
+    width: 52,
   },
   subtitle: {
     color: COLORS.textSecondary,

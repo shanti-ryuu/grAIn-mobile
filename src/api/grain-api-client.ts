@@ -14,6 +14,20 @@ type ApiEnvelope<T> = {
   timestamp?: string;
 };
 
+export class GrainApiError extends Error {
+  errorCode?: string;
+  data?: unknown;
+  status?: number;
+
+  constructor(message: string, options: { errorCode?: string; data?: unknown; status?: number } = {}) {
+    super(message);
+    this.name = "GrainApiError";
+    this.errorCode = options.errorCode;
+    this.data = options.data;
+    this.status = options.status;
+  }
+}
+
 export interface AuthUser {
   _id: string;
   id?: string;
@@ -30,6 +44,15 @@ export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
   user: AuthUser;
+}
+
+export interface VerificationStartResponse {
+  message: string;
+  email: string;
+}
+
+export interface MessageResponse {
+  message: string;
 }
 
 export interface PaginatedResponse<T> {
@@ -191,11 +214,15 @@ apiClient.interceptors.response.use(
       emitLogout();
     }
 
-    const message =
-      error.response?.data?.error ??
-      error.message ??
-      "Unable to complete request. Please try again.";
-    return Promise.reject(new Error(message));
+    const envelope = error.response?.data;
+    const message = envelope?.error ?? error.message ?? "Unable to complete request. Please try again.";
+    return Promise.reject(
+      new GrainApiError(message, {
+        errorCode: envelope?.errorCode,
+        data: envelope?.data,
+        status: error.response?.status,
+      }),
+    );
   },
 );
 
@@ -207,8 +234,12 @@ export const grainApi = {
   auth: {
     login: (email: string, password: string) =>
       apiClient.post<AuthResponse, AuthResponse>("/auth/login", { email, password }),
-    register: (name: string, email: string, password: string, role: "admin" | "farmer" = "farmer") =>
-      apiClient.post<AuthResponse, AuthResponse>("/auth/register", { name, email, password, role }),
+    register: (name: string, email: string, password: string) =>
+      apiClient.post<VerificationStartResponse, VerificationStartResponse>("/auth/register", { name, email, password }),
+    verifyOtp: (email: string, otp: string) =>
+      apiClient.post<AuthResponse, AuthResponse>("/auth/verify-otp", { email, otp }),
+    resendOtp: (email: string) =>
+      apiClient.post<MessageResponse, MessageResponse>("/auth/resend-otp", { email }),
     me: (timeout?: number) => apiClient.post<AuthUser, AuthUser>("/auth/me", undefined, withTimeout(timeout)),
     logout: () => apiClient.post<{ message: string }, { message: string }>("/auth/logout"),
   },

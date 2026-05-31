@@ -54,12 +54,15 @@ function Chip({ label, color, position }: { label: string; color: string; positi
 }
 
 export function ChamberStatusOverlay({ temperature, moisture, fanSpeed, isRunning }: ChamberStatusOverlayProps) {
+  const moistureLabel = moisture > 0 ? `${moisture.toFixed(1)}% MC` : "-- MC";
+  const fanLabel = fanSpeed > 0 ? `${fanSpeed.toFixed(0)}% FAN` : "-- FAN";
+
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       <Chip color={isRunning ? COLORS.success : COLORS.idle} label={isRunning ? "RUNNING" : "IDLE"} position="tl" />
       <Chip color={tempColor(temperature)} label={`${temperature.toFixed(1)} C`} position="tr" />
-      <Chip color={moistureLevelColor(moisture)} label={`${moisture.toFixed(1)}% MC`} position="bl" />
-      <Chip color={COLORS.info} label={`${fanSpeed.toFixed(0)}% FAN`} position="br" />
+      <Chip color={moistureLevelColor(moisture)} label={moistureLabel} position="bl" />
+      <Chip color={COLORS.info} label={fanLabel} position="br" />
     </View>
   );
 }

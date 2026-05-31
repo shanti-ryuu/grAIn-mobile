@@ -50,6 +50,14 @@ export function formatEnergy(value: number): string {
   return `${value.toFixed(2)} kWh`;
 }
 
+export function formatWeight(rawGrams: number): string {
+  if (!rawGrams || rawGrams <= 0) {
+    return "0.0 kg";
+  }
+
+  return `${(rawGrams / 1000).toFixed(1)} kg`;
+}
+
 export function getMoistureColor(value: number): string {
   if (value <= SENSOR_THRESHOLDS.MOISTURE_TARGET) {
     return COLORS.success;

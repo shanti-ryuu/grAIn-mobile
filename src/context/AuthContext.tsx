@@ -11,7 +11,7 @@ import {
   useState,
 } from "react";
 
-import { AuthUser, GRAIN_TOKEN_KEY, grainApi } from "@/api/grain-api-client";
+import { AuthUser, GRAIN_TOKEN_KEY, VerificationStartResponse, grainApi } from "@/api/grain-api-client";
 import { addLogoutListener } from "@/utils/authEvents";
 
 interface AuthContextValue {
@@ -21,7 +21,9 @@ interface AuthContextValue {
   isReconnecting: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<AuthUser>;
-  signup: (name: string, email: string, password: string, role?: "admin" | "farmer") => Promise<AuthUser>;
+  signup: (name: string, email: string, password: string) => Promise<VerificationStartResponse>;
+  verifyOtp: (email: string, otp: string) => Promise<AuthUser>;
+  resendOtp: (email: string) => Promise<string>;
   logout: () => Promise<void>;
 }
 
@@ -164,17 +166,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return response.user;
   }, []);
 
-  const signup = useCallback(
-    async (name: string, email: string, password: string, role: "admin" | "farmer" = "farmer") => {
-      setError(null);
-      const response = await grainApi.auth.register(name, email, password, role);
-      await SecureStore.setItemAsync(GRAIN_TOKEN_KEY, response.accessToken);
-      setUser(response.user);
-      setIsAuthenticated(true);
-      return response.user;
-    },
-    [],
-  );
+  const signup = useCallback(async (name: string, email: string, password: string) => {
+    setError(null);
+    return grainApi.auth.register(name, email, password);
+  }, []);
+
+  const verifyOtp = useCallback(async (email: string, otp: string) => {
+    setError(null);
+    const response = await grainApi.auth.verifyOtp(email, otp);
+    await SecureStore.setItemAsync(GRAIN_TOKEN_KEY, response.accessToken);
+    setUser(response.user);
+    setIsAuthenticated(true);
+    return response.user;
+  }, []);
+
+  const resendOtp = useCallback(async (email: string) => {
+    setError(null);
+    const response = await grainApi.auth.resendOtp(email);
+    return response.message;
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -184,10 +194,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isReconnecting,
       error,
       login,
+      resendOtp,
       signup,
+      verifyOtp,
       logout,
     }),
-    [error, isAuthenticated, isLoading, isReconnecting, login, logout, signup, user],
+    [error, isAuthenticated, isLoading, isReconnecting, login, logout, resendOtp, signup, user, verifyOtp],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

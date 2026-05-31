@@ -21,6 +21,7 @@ import { useDevices } from "@/hooks/useDevices";
 import { useDryerControl } from "@/hooks/useDryerControl";
 import { useFanControl } from "@/hooks/useFanControl";
 import { useOfflineGuard } from "@/hooks/useOfflineGuard";
+import { useRealtimeSensor } from "@/hooks/useRealtimeSensor";
 import { COLORS, SPACING } from "@/utils/constants";
 import { getListData } from "@/utils/data";
 import { useBottomTabPadding } from "@/utils/layout";
@@ -106,8 +107,8 @@ function ToggleControlRow({
   );
 }
 
-function runtimeSwitch(device: { runtimeState?: Record<string, unknown> } | null | undefined, key: string): boolean {
-  return device?.runtimeState?.[key] === "ON";
+function runtimeSwitch(runtimeState: Record<string, unknown> | null | undefined, key: string): boolean {
+  return runtimeState?.[key] === "ON";
 }
 
 export function ControlScreen() {
@@ -136,7 +137,9 @@ export function ControlScreen() {
   const [fan2On, setFan2On] = useState(false);
   const [heaterOn, setHeaterOn] = useState(false);
   const [relayOn, setRelayOn] = useState(false);
-  const selectedDeviceOnline = selectedDevice?.status === "online";
+  const realtimeSensor = useRealtimeSensor(selectedDevice?.deviceId);
+  const selectedDeviceOnline = realtimeSensor.isOnline ?? (selectedDevice?.status === "online");
+  const selectedRuntimeState = realtimeSensor.runtimeState ?? selectedDevice?.runtimeState ?? null;
   const { theme } = useTheme();
   const bottomPadding = useBottomTabPadding(32);
   const { canInteract, guard, warnOffline } = useOfflineGuard(Boolean(selectedDeviceOnline));
@@ -164,11 +167,11 @@ export function ControlScreen() {
   }, [devices, selectedDevice, selectedDeviceId, setSelectedDevice]);
 
   useEffect(() => {
-    setFan1On(runtimeSwitch(selectedDevice, "fan1State"));
-    setFan2On(runtimeSwitch(selectedDevice, "fan2State"));
-    setHeaterOn(runtimeSwitch(selectedDevice, "heaterState"));
-    setRelayOn(runtimeSwitch(selectedDevice, "relayState"));
-  }, [selectedDevice]);
+    setFan1On(runtimeSwitch(selectedRuntimeState, "fan1State"));
+    setFan2On(runtimeSwitch(selectedRuntimeState, "fan2State"));
+    setHeaterOn(runtimeSwitch(selectedRuntimeState, "heaterState"));
+    setRelayOn(runtimeSwitch(selectedRuntimeState, "relayState"));
+  }, [selectedRuntimeState]);
 
   const fetchPrediction = useCallback(async () => {
     if (mode !== "AUTO" || !selectedDevice) {
@@ -286,7 +289,7 @@ export function ControlScreen() {
                   selected && { backgroundColor: theme.accentPrimary, borderColor: theme.accentPrimary },
                 ]}
               >
-                <View style={[styles.statusDot, { backgroundColor: device.status === "online" ? COLORS.success : COLORS.idle }]} />
+                <View style={[styles.statusDot, { backgroundColor: selected && selectedDeviceOnline ? COLORS.success : device.status === "online" ? COLORS.success : COLORS.idle }]} />
                 <View>
                   <Text style={[styles.deviceChipName, { color: theme.textPrimary }, selected && styles.deviceChipTextActive]}>{device.name}</Text>
                   <Text style={[styles.deviceChipId, { color: theme.textSecondary }, selected && styles.deviceChipTextActive]}>{device.deviceId}</Text>
@@ -306,7 +309,7 @@ export function ControlScreen() {
               <Text style={styles.cardTitle}>{selectedDevice.name}</Text>
               <Text style={styles.cardSubtitle}>{selectedDevice.deviceId}</Text>
             </View>
-            <StatusBadge status={selectedDevice.status} size="sm" />
+            <StatusBadge status={selectedDeviceOnline ? "online" : "offline"} size="sm" />
           </View>
         </Card>
       ) : null}

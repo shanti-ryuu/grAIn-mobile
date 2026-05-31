@@ -17,13 +17,16 @@ import { AlertCard } from "@/components/AlertCard";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Card } from "@/components/Card";
 import { EmptyState } from "@/components/EmptyState";
+import { SensorCard } from "@/components/SensorCard";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useAssistant } from "@/context/AssistantContext";
 import { useTheme } from "@/context/ThemeContext";
 import { useDevices } from "@/hooks/useDevices";
+import { useDryerControl } from "@/hooks/useDryerControl";
+import { useRealtimeSensor } from "@/hooks/useRealtimeSensor";
 import { COLORS, SPACING } from "@/utils/constants";
 import { getListData, getPaginationTotal, relativeTime, sessionProgress } from "@/utils/data";
-import { formatDuration } from "@/utils/formatters";
+import { formatDuration, formatWeight } from "@/utils/formatters";
 import { useBottomTabPadding } from "@/utils/layout";
 
 function formatNumber(value?: number, decimals = 1): string {
@@ -72,6 +75,7 @@ function StatCard({ label, value, color }: { label: string; value: string | numb
 export function DashboardScreen() {
   const { devices, isLoading, error, refetch } = useDevices();
   const { openAssistant } = useAssistant();
+  const { fanSpeed: setFanSpeed } = useDryerControl();
   const { theme } = useTheme();
   const bottomPadding = useBottomTabPadding(32);
   const [activeSessions, setActiveSessions] = useState<SessionSummary[]>([]);
@@ -113,6 +117,11 @@ export function DashboardScreen() {
   }, [fetchDashboardData]);
 
   const onlineDevices = useMemo(() => devices.filter((device) => device.status === "online").length, [devices]);
+  const primaryDevice = devices[0] ?? null;
+  const realtimeSensor = useRealtimeSensor(primaryDevice?.deviceId);
+  const liveSensor = realtimeSensor.sensorData;
+  const primaryDeviceOnline = realtimeSensor.isOnline ?? (primaryDevice?.status === "online");
+  const liveOnlineDevices = primaryDevice && primaryDeviceOnline && primaryDevice.status !== "online" ? onlineDevices + 1 : onlineDevices;
   const firstActiveSession = activeSessions[0];
   const activeProgress = firstActiveSession
     ? sessionProgress(
@@ -137,6 +146,50 @@ export function DashboardScreen() {
         <Header unreadCount={unreadNotificationCount} />
 
         <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Live Readings</Text>
+          {primaryDevice ? <Text style={[styles.sectionMeta, { color: theme.textSecondary }]}>{primaryDevice.deviceId}</Text> : null}
+        </View>
+        <View style={styles.sensorGrid}>
+          <View style={styles.sensorTile}>
+            <SensorCard color={COLORS.primary} icon="thermometer" label="Temperature" unit="C" value={formatNumber(liveSensor.temperature)} />
+          </View>
+          <View style={styles.sensorTile}>
+            <SensorCard color={COLORS.info} icon="water" label="Humidity" unit="%" value={formatNumber(liveSensor.humidity, 0)} />
+          </View>
+          <View style={styles.sensorTile}>
+            <SensorCard
+              color={COLORS.success}
+              icon="leaf"
+              label="Moisture"
+              unit={liveSensor.moisture && liveSensor.moisture > 0 ? "%" : ""}
+              value={liveSensor.moisture && liveSensor.moisture > 0 ? formatNumber(liveSensor.moisture) : "—"}
+            />
+          </View>
+          <View style={styles.sensorTile}>
+            <SensorCard
+              color={COLORS.info}
+              icon="speedometer"
+              label="Fan Speed"
+              secondaryLabel={`Set: ${setFanSpeed}%`}
+              unit={liveSensor.fanSpeed && liveSensor.fanSpeed > 0 ? "%" : ""}
+              value={liveSensor.fanSpeed && liveSensor.fanSpeed > 0 ? formatNumber(liveSensor.fanSpeed, 0) : "—"}
+            />
+          </View>
+          <View style={styles.sensorTile}>
+            <SensorCard
+              color={COLORS.warning}
+              icon="flash"
+              label="Solar Voltage"
+              unit={liveSensor.solarVoltage && liveSensor.solarVoltage > 0 ? "V" : ""}
+              value={liveSensor.solarVoltage && liveSensor.solarVoltage > 0 ? formatNumber(liveSensor.solarVoltage) : "—"}
+            />
+          </View>
+          <View style={styles.sensorTile}>
+            <SensorCard color={COLORS.textSecondary} icon="scale" label="Weight" unit="" value={formatWeight(liveSensor.weight ?? 0)} />
+          </View>
+        </View>
+
+        <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Devices</Text>
           {isLoading ? <ActivityIndicator color={COLORS.primary} /> : null}
         </View>
@@ -158,7 +211,12 @@ export function DashboardScreen() {
                 styles.deviceCard,
                 {
                   backgroundColor: theme.bgCard,
-                  borderColor: item.status === "online" ? theme.statusOnline : theme.border,
+                  borderColor:
+                    item.deviceId === primaryDevice?.deviceId && primaryDeviceOnline
+                      ? theme.statusOnline
+                      : item.status === "online"
+                        ? theme.statusOnline
+                        : theme.border,
                 },
               ]}
             >
@@ -169,7 +227,10 @@ export function DashboardScreen() {
                   </Text>
                   <Text style={[styles.deviceId, { color: theme.textSecondary }]}>{item.deviceId}</Text>
                 </View>
-                <StatusBadge status={item.status} size="sm" />
+                <StatusBadge
+                  status={item.deviceId === primaryDevice?.deviceId ? (primaryDeviceOnline ? "online" : "offline") : item.status}
+                  size="sm"
+                />
               </View>
               <Text style={[styles.moistureValue, { color: theme.accentPrimary }]}>{formatNumber(item.lastMoisture)}%</Text>
               <Text style={[styles.deviceMetric, { color: theme.textSecondary }]}>
@@ -227,7 +288,7 @@ export function DashboardScreen() {
         )}
 
         <View style={styles.statsRow}>
-          <StatCard label="Online Devices" value={`${onlineDevices}/${devices.length}`} color={COLORS.success} />
+          <StatCard label="Online Devices" value={`${liveOnlineDevices}/${devices.length}`} color={COLORS.success} />
           <StatCard label="Active Sessions" value={activeSessions.length} color={COLORS.info} />
           <StatCard
             label="Unread Alerts"
@@ -420,10 +481,24 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
     marginTop: SPACING.md,
   },
+  sectionMeta: {
+    fontFamily: "monospace",
+    fontSize: 12,
+    fontWeight: "800",
+  },
   sectionTitle: {
     color: COLORS.textPrimary,
     fontSize: 18,
     fontWeight: "900",
+  },
+  sensorGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: SPACING.sm,
+  },
+  sensorTile: {
+    flexBasis: "48%",
+    flexGrow: 1,
   },
   sessionDetail: {
     color: COLORS.textSecondary,

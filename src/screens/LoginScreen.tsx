@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Link, router } from "expo-router";
 import { useState } from "react";
@@ -14,12 +15,14 @@ import {
 
 import { useAuth } from "@/context/AuthContext";
 import { BrandLogo } from "@/components/BrandLogo";
+import { GrainApiError } from "@/api/grain-api-client";
 import { COLORS, SPACING } from "@/utils/constants";
 
 export function LoginScreen() {
   const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -31,6 +34,11 @@ export function LoginScreen() {
       router.replace("/(app)/dashboard");
     } catch (submitError) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (submitError instanceof GrainApiError && submitError.errorCode === "EMAIL_NOT_VERIFIED") {
+        const data = submitError.data as { email?: string } | undefined;
+        router.push({ pathname: "/verify-otp", params: { email: data?.email ?? email.trim() } } as never);
+        return;
+      }
       setError(submitError instanceof Error ? submitError.message : "Login failed");
     } finally {
       setIsSubmitting(false);
@@ -51,18 +59,31 @@ export function LoginScreen() {
           keyboardType="email-address"
           onChangeText={setEmail}
           placeholder="admin@grain.com"
+          placeholderTextColor={COLORS.textSecondary}
           style={styles.input}
           value={email}
         />
 
         <Text style={styles.label}>Password</Text>
-        <TextInput
-          onChangeText={setPassword}
-          placeholder="Enter password"
-          secureTextEntry
-          style={styles.input}
-          value={password}
-        />
+        <View style={styles.passwordField}>
+          <TextInput
+            onChangeText={setPassword}
+            placeholder="Enter password"
+            placeholderTextColor={COLORS.textSecondary}
+            secureTextEntry={!passwordVisible}
+            style={[styles.input, styles.passwordInput]}
+            value={password}
+          />
+          <Pressable
+            accessibilityLabel={passwordVisible ? "Hide password" : "Show password"}
+            accessibilityRole="button"
+            hitSlop={10}
+            onPress={() => setPasswordVisible((visible) => !visible)}
+            style={styles.passwordToggle}
+          >
+            <Ionicons color={COLORS.textSecondary} name={passwordVisible ? "eye-off" : "eye"} size={22} />
+          </Pressable>
+        </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -99,7 +120,7 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   disabled: {
-    opacity: 0.65,
+    backgroundColor: "#7A9A73",
   },
   error: {
     color: COLORS.danger,
@@ -115,18 +136,20 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
   },
   input: {
-    borderColor: COLORS.border,
+    backgroundColor: "#FFFFFF",
+    borderColor: "#CBD5C0",
     borderRadius: 12,
     borderWidth: 1,
     color: COLORS.textPrimary,
     fontSize: 16,
+    fontWeight: "600",
     height: 50,
     paddingHorizontal: SPACING.md,
   },
   label: {
     color: COLORS.textPrimary,
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   link: {
     color: COLORS.primary,
@@ -143,6 +166,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: SPACING.sm,
     marginBottom: SPACING.xl,
+  },
+  passwordField: {
+    height: 50,
+    justifyContent: "center",
+  },
+  passwordInput: {
+    paddingRight: 52,
+  },
+  passwordToggle: {
+    alignItems: "center",
+    height: 50,
+    justifyContent: "center",
+    position: "absolute",
+    right: 0,
+    width: 52,
   },
   subtitle: {
     color: COLORS.textSecondary,

@@ -20,10 +20,21 @@ interface AuthContextValue {
   isLoading: boolean;
   isReconnecting: boolean;
   error: string | null;
-  login: (email: string, password: string) => Promise<AuthUser>;
-  signup: (name: string, email: string, password: string) => Promise<VerificationStartResponse>;
-  verifyOtp: (email: string, otp: string) => Promise<AuthUser>;
-  resendOtp: (email: string) => Promise<string>;
+  login: (identifier: string, password: string) => Promise<AuthUser>;
+  signup: (
+    name: string,
+    email: string,
+    password: string,
+    phoneNumber?: string,
+    verificationChannel?: "email" | "sms",
+  ) => Promise<VerificationStartResponse>;
+  verifyOtp: (payload: {
+    email?: string;
+    phoneNumber?: string;
+    otp: string;
+    verificationChannel?: "email" | "sms";
+  }) => Promise<AuthUser>;
+  resendOtp: (payload: { email?: string; phoneNumber?: string; verificationChannel?: "email" | "sms" }) => Promise<string>;
   logout: () => Promise<void>;
 }
 
@@ -157,32 +168,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [bootstrap, logout, stopBackgroundRetry]);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (identifier: string, password: string) => {
     setError(null);
-    const response = await grainApi.auth.login(email, password);
+    const response = await grainApi.auth.login(identifier, password);
     await SecureStore.setItemAsync(GRAIN_TOKEN_KEY, response.accessToken);
     setUser(response.user);
     setIsAuthenticated(true);
     return response.user;
   }, []);
 
-  const signup = useCallback(async (name: string, email: string, password: string) => {
-    setError(null);
-    return grainApi.auth.register(name, email, password);
-  }, []);
+  const signup = useCallback(
+    async (
+      name: string,
+      email: string,
+      password: string,
+      phoneNumber?: string,
+      verificationChannel: "email" | "sms" = "email",
+    ) => {
+      setError(null);
+      return grainApi.auth.register(name, email, password, phoneNumber, verificationChannel);
+    },
+    [],
+  );
 
-  const verifyOtp = useCallback(async (email: string, otp: string) => {
+  const verifyOtp = useCallback(async (payload: {
+    email?: string;
+    phoneNumber?: string;
+    otp: string;
+    verificationChannel?: "email" | "sms";
+  }) => {
     setError(null);
-    const response = await grainApi.auth.verifyOtp(email, otp);
+    const response = await grainApi.auth.verifyOtp(payload);
     await SecureStore.setItemAsync(GRAIN_TOKEN_KEY, response.accessToken);
     setUser(response.user);
     setIsAuthenticated(true);
     return response.user;
   }, []);
 
-  const resendOtp = useCallback(async (email: string) => {
+  const resendOtp = useCallback(async (payload: { email?: string; phoneNumber?: string; verificationChannel?: "email" | "sms" }) => {
     setError(null);
-    const response = await grainApi.auth.resendOtp(email);
+    const response = await grainApi.auth.resendOtp(payload);
     return response.message;
   }, []);
 

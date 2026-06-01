@@ -20,7 +20,7 @@ import { COLORS, SPACING } from "@/utils/constants";
 
 export function LoginScreen() {
   const { login } = useAuth();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,13 +30,24 @@ export function LoginScreen() {
     setIsSubmitting(true);
     setError(null);
     try {
-      await login(email.trim(), password);
+      await login(identifier.trim(), password);
       setTimeout(() => router.replace("/(app)/dashboard"), 0);
     } catch (submitError) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       if (submitError instanceof GrainApiError && submitError.errorCode === "EMAIL_NOT_VERIFIED") {
-        const data = submitError.data as { email?: string } | undefined;
-        router.push({ pathname: "/verify-otp", params: { email: data?.email ?? email.trim() } } as never);
+        const data = submitError.data as {
+          email?: string;
+          phoneNumber?: string;
+          verificationChannel?: "email" | "sms";
+        } | undefined;
+        router.push({
+          pathname: "/verify-otp",
+          params: {
+            email: data?.email ?? identifier.trim(),
+            phoneNumber: data?.phoneNumber,
+            verificationChannel: data?.verificationChannel ?? "email",
+          },
+        } as never);
         return;
       }
       setError(submitError instanceof Error ? submitError.message : "Login failed");
@@ -53,15 +64,15 @@ export function LoginScreen() {
       </View>
 
       <View style={styles.form}>
-        <Text style={styles.label}>Email</Text>
+        <Text style={styles.label}>Email or Mobile Number</Text>
         <TextInput
           autoCapitalize="none"
           keyboardType="email-address"
-          onChangeText={setEmail}
-          placeholder="admin@grain.com"
+          onChangeText={setIdentifier}
+          placeholder="farmer@grain.com or 09XXXXXXXXX"
           placeholderTextColor={COLORS.textSecondary}
           style={styles.input}
-          value={email}
+          value={identifier}
         />
 
         <Text style={styles.label}>Password</Text>

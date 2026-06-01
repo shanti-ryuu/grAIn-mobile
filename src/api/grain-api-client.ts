@@ -51,6 +51,8 @@ type MeResponse = AuthUser | { user: AuthUser };
 export interface VerificationStartResponse {
   message: string;
   email: string;
+  phoneNumber?: string;
+  verificationChannel: "email" | "sms";
 }
 
 export interface MessageResponse {
@@ -241,14 +243,26 @@ function withTimeout(timeout?: number): AxiosRequestConfig | undefined {
 
 export const grainApi = {
   auth: {
-    login: (email: string, password: string) =>
-      apiClient.post<AuthResponse, AuthResponse>("/auth/login", { email, password }),
-    register: (name: string, email: string, password: string) =>
-      apiClient.post<VerificationStartResponse, VerificationStartResponse>("/auth/register", { name, email, password }),
-    verifyOtp: (email: string, otp: string) =>
-      apiClient.post<AuthResponse, AuthResponse>("/auth/verify-otp", { email, otp }),
-    resendOtp: (email: string) =>
-      apiClient.post<MessageResponse, MessageResponse>("/auth/resend-otp", { email }),
+    login: (identifier: string, password: string) =>
+      apiClient.post<AuthResponse, AuthResponse>("/auth/login", { identifier, password }),
+    register: (
+      name: string,
+      email: string,
+      password: string,
+      phoneNumber?: string,
+      verificationChannel: "email" | "sms" = "email",
+    ) =>
+      apiClient.post<VerificationStartResponse, VerificationStartResponse>("/auth/register", {
+        name,
+        email,
+        password,
+        phoneNumber,
+        verificationChannel,
+      }),
+    verifyOtp: (payload: { email?: string; phoneNumber?: string; otp: string; verificationChannel?: "email" | "sms" }) =>
+      apiClient.post<AuthResponse, AuthResponse>("/auth/verify-otp", payload),
+    resendOtp: (payload: { email?: string; phoneNumber?: string; verificationChannel?: "email" | "sms" }) =>
+      apiClient.post<MessageResponse, MessageResponse>("/auth/resend-otp", payload),
     me: async (timeout?: number) => {
       const response = await apiClient.post<MeResponse, MeResponse>("/auth/me", undefined, withTimeout(timeout));
       return "user" in response ? response.user : response;

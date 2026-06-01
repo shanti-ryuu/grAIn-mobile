@@ -46,6 +46,8 @@ export interface AuthResponse {
   user: AuthUser;
 }
 
+type MeResponse = AuthUser | { user: AuthUser };
+
 export interface VerificationStartResponse {
   message: string;
   email: string;
@@ -247,7 +249,10 @@ export const grainApi = {
       apiClient.post<AuthResponse, AuthResponse>("/auth/verify-otp", { email, otp }),
     resendOtp: (email: string) =>
       apiClient.post<MessageResponse, MessageResponse>("/auth/resend-otp", { email }),
-    me: (timeout?: number) => apiClient.post<AuthUser, AuthUser>("/auth/me", undefined, withTimeout(timeout)),
+    me: async (timeout?: number) => {
+      const response = await apiClient.post<MeResponse, MeResponse>("/auth/me", undefined, withTimeout(timeout));
+      return "user" in response ? response.user : response;
+    },
     logout: () => apiClient.post<{ message: string }, { message: string }>("/auth/logout"),
   },
   devices: {

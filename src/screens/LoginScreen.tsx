@@ -31,7 +31,7 @@ export function LoginScreen() {
     setError(null);
     try {
       await login(email.trim(), password);
-      router.replace("/(app)/dashboard");
+      setTimeout(() => router.replace("/(app)/dashboard"), 0);
     } catch (submitError) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       if (submitError instanceof GrainApiError && submitError.errorCode === "EMAIL_NOT_VERIFIED") {

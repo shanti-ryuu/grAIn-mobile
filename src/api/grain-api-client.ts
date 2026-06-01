@@ -140,7 +140,14 @@ export interface PredictionResponse {
   projectedCurve?: { minutesFromNow: number; predictedMoisture: number }[];
   targetMoisture: number;
   algorithm: string;
-  modelMetrics?: { moistureR2?: number };
+  modelMetrics?: {
+    moistureR2?: number;
+    moistureR2_rf?: number | null;
+    moistureR2_xgb?: number | null;
+    moistureR2_ensemble?: number | null;
+    rfWeight?: number | null;
+    xgbWeight?: number | null;
+  };
 }
 
 export interface NotificationSummary {

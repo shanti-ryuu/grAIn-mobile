@@ -234,7 +234,9 @@ export function AIPredictionScreen() {
         </Pressable>
         {metricsOpen ? (
           <View style={styles.metricsBox}>
-            <Text style={[styles.metricText, { color: theme.textSecondary }]}>R2 score: {prediction?.modelMetrics?.moistureR2?.toFixed(4) ?? "--"}</Text>
+            <Text style={[styles.metricText, { color: theme.textSecondary }]}>
+              R2 score: {(prediction?.modelMetrics?.moistureR2_ensemble ?? prediction?.modelMetrics?.moistureR2)?.toFixed(4) ?? "--"}
+            </Text>
             <Text style={[styles.metricText, { color: theme.textSecondary }]}>Algorithm: {prediction?.algorithm ?? "--"}</Text>
             <Text style={[styles.metricText, { color: theme.textSecondary }]}>Last updated: {lastFetchedAt ? relativeTime(lastFetchedAt) : "--"}</Text>
           </View>

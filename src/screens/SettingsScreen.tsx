@@ -92,12 +92,12 @@ export function SettingsScreen() {
 
   return (
     <Animated.View style={[styles.animatedRoot, { backgroundColor: theme.bgBase }, flashStyle]}>
-    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}>
-      <View>
+      <View style={[styles.header, { backgroundColor: theme.bgBase }]}>
         <Text style={[styles.title, { color: theme.textPrimary }]}>Settings</Text>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Account, preferences, and app status.</Text>
       </View>
 
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}>
       <Card style={styles.card}>
         <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Account</Text>
         <Pressable onPress={() => router.push("/(app)/profile")} style={styles.profileRow}>
@@ -244,7 +244,12 @@ const styles = StyleSheet.create({
   content: {
     gap: SPACING.md,
     padding: SPACING.md,
+    paddingTop: 0,
     paddingBottom: 120,
+  },
+  header: {
+    padding: SPACING.md,
+    paddingBottom: SPACING.sm,
   },
   infoLine: {
     gap: 4,

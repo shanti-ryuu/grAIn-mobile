@@ -265,8 +265,8 @@ export function ControlScreen() {
   const controlDisabled = !selectedDevice || !canInteract || fanControls.isLoading;
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.bgBase }]} contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: theme.bgBase }]}>
+      <View style={[styles.header, { backgroundColor: theme.bgBase }]}>
         <View>
           <Text style={[styles.title, { color: theme.textPrimary }]}>Dryer Control</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Select a dryer and send hardware-safe commands.</Text>
@@ -274,6 +274,7 @@ export function ControlScreen() {
         {devicesLoading ? <ActivityIndicator color={COLORS.primary} /> : null}
       </View>
 
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}>
       <Text style={styles.sectionTitle}>Device</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.deviceScroller}>
         {devices.length > 0 ? (
@@ -475,7 +476,8 @@ export function ControlScreen() {
           </Card>
         </>
       ) : null}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -543,6 +545,7 @@ const styles = StyleSheet.create({
   content: {
     gap: SPACING.md,
     padding: SPACING.md,
+    paddingTop: 0,
     paddingBottom: 120,
   },
   controlLabel: {
@@ -600,6 +603,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
+    padding: SPACING.md,
+    paddingBottom: SPACING.sm,
   },
   panel: {
     gap: SPACING.md,

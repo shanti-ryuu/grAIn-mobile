@@ -89,14 +89,8 @@ export function AnalyticsScreen() {
   const abortedSessions = Math.max(0, analytics.totalSessions - analytics.completedSessions - analytics.activeSessions);
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: theme.bgBase }]}
-      contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}
-      refreshControl={
-        <RefreshControl refreshing={isRefreshing} onRefresh={refreshAnalytics} tintColor={theme.accentPrimary} />
-      }
-    >
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: theme.bgBase }]}>
+      <View style={[styles.header, { backgroundColor: theme.bgBase }]}>
         <View>
           <Text style={[styles.title, { color: theme.textPrimary }]}>Analytics</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Drying performance and energy trends.</Text>
@@ -104,6 +98,12 @@ export function AnalyticsScreen() {
         {isLoading ? <ActivityIndicator color={COLORS.primary} /> : null}
       </View>
 
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={refreshAnalytics} tintColor={theme.accentPrimary} />
+        }
+      >
       <View style={styles.periodRow}>
         {(["daily", "weekly", "monthly"] as const).map((item) => (
           <Pressable
@@ -195,7 +195,8 @@ export function AnalyticsScreen() {
           <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No energy data yet.</Text>
         )}
       </Card>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -230,6 +231,7 @@ const styles = StyleSheet.create({
   content: {
     gap: SPACING.md,
     padding: SPACING.md,
+    paddingTop: 0,
     paddingBottom: 120,
   },
   emptyText: {
@@ -245,6 +247,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
+    padding: SPACING.md,
+    paddingBottom: SPACING.sm,
   },
   periodChip: {
     alignItems: "center",

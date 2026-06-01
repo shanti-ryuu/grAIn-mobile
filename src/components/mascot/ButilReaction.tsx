@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { ButilMood } from "@/components/mascot/Butil";
 import { ButilTip } from "@/components/mascot/ButilTip";
+import { useTutorial } from "@/context/TutorialContext";
 import { useDevices } from "@/hooks/useDevices";
 import { useRealtimeSensor } from "@/hooks/useRealtimeSensor";
 
@@ -15,6 +16,7 @@ type Reaction = {
 const debounceMs = 5 * 60 * 1000;
 
 export function ButilReaction() {
+  const { currentTutorialScreen } = useTutorial();
   const { devices } = useDevices();
   const deviceId = useMemo(() => devices.find((device) => device.status === "online")?.deviceId ?? "", [devices]);
   const { sensorData } = useRealtimeSensor(deviceId);
@@ -61,7 +63,7 @@ export function ButilReaction() {
     void evaluate();
   }, [sensorData]);
 
-  if (!reaction) {
+  if (!reaction || currentTutorialScreen) {
     return null;
   }
 

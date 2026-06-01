@@ -148,8 +148,10 @@ export function InteractiveTutorial() {
         <Rect fill="rgba(0,0,0,0.68)" height={height} mask="url(#spotlight)" width={width} x={0} y={0} />
       </Svg>
       <View style={[styles.butilWrap, butilStyle]}>
-        <SpeechBubble text={step.dialogue.en} visible />
-        <Butil mood={step.butilMood} size={72} speaking />
+        <SpeechBubble pointerAlign="center" text={step.dialogue.en} visible />
+        <View style={styles.butilBody}>
+          <Butil mood={step.butilMood} size={72} speaking />
+        </View>
       </View>
       <Pressable onPress={next} style={[styles.nextButton, { bottom: Math.max(86, insets.bottom + 76) }]}>
         <Text style={styles.nextText}>{stepIndex >= steps.length - 1 ? "Got it" : "Next"}</Text>
@@ -163,6 +165,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     position: "absolute",
     zIndex: 2,
+  },
+  butilBody: {
+    marginTop: -2,
   },
   nextButton: {
     alignItems: "center",

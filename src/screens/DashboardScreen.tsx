@@ -36,19 +36,24 @@ function formatNumber(value?: number, decimals = 1): string {
 function Header({ unreadCount }: { unreadCount: number }) {
   const { theme } = useTheme();
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { backgroundColor: theme.bgBase }]}>
       <View>
         <BrandLogo style={styles.headerLogo} />
         <Text style={[styles.headerSubtitle, { color: theme.textSecondary }]}>Mobile dryer monitor</Text>
       </View>
-      <View style={[styles.bellButton, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+      <Pressable
+        accessibilityLabel="Open notifications"
+        accessibilityRole="button"
+        onPress={() => router.push("/(app)/alerts")}
+        style={[styles.bellButton, { backgroundColor: theme.bgCard, borderColor: theme.border }]}
+      >
         <Ionicons name="notifications" size={23} color={theme.textPrimary} />
         {unreadCount > 0 ? (
           <View style={styles.notificationBadge}>
             <Text style={styles.notificationText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
           </View>
         ) : null}
-      </View>
+      </Pressable>
     </View>
   );
 }
@@ -139,12 +144,11 @@ export function DashboardScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bgBase }]}>
+      <Header unreadCount={unreadNotificationCount} />
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshAll} tintColor={COLORS.primary} />}
       >
-        <Header unreadCount={unreadNotificationCount} />
-
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Live Readings</Text>
           {primaryDevice ? <Text style={[styles.sectionMeta, { color: theme.textSecondary }]}>{primaryDevice.deviceId}</Text> : null}
@@ -375,6 +379,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: SPACING.md,
+    paddingTop: 0,
     paddingBottom: 110,
   },
   deviceCard: {
@@ -426,7 +431,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: SPACING.lg,
+    paddingBottom: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.sm,
   },
   headerSubtitle: {
     color: COLORS.textSecondary,

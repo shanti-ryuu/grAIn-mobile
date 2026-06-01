@@ -13,6 +13,7 @@ const STORAGE_KEY = "assistant_button_position";
 const BUTTON_SIZE = 68;
 const TAP_THRESHOLD = 5;
 const EDGE_PADDING = 16;
+const HEADER_CLEARANCE = 104;
 const PanResponder = (ReactNative as unknown as { PanResponder: { create: (config: Record<string, unknown>) => { panHandlers: Record<string, unknown> } } }).PanResponder;
 
 type StoredPosition = {
@@ -32,7 +33,7 @@ export function AssistantFAB() {
   const bounds = {
     minX: EDGE_PADDING,
     maxX: screen.width - BUTTON_SIZE - EDGE_PADDING,
-    minY: insets.top + EDGE_PADDING,
+    minY: insets.top + HEADER_CLEARANCE,
     maxY: screen.height - insets.bottom - BUTTON_SIZE - 80,
   };
   const defaultPosition = {

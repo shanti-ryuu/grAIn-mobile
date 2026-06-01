@@ -7,10 +7,11 @@ import { COLORS, SPACING } from "@/utils/constants";
 interface SpeechBubbleProps {
   text: string;
   position?: "top" | "right";
+  pointerAlign?: "left" | "center";
   visible: boolean;
 }
 
-export function SpeechBubble({ text, position = "top", visible }: SpeechBubbleProps) {
+export function SpeechBubble({ text, position = "top", pointerAlign = "left", visible }: SpeechBubbleProps) {
   const [typedText, setTypedText] = useState("");
   const scale = useSharedValue(0.92);
   const opacity = useSharedValue(0);
@@ -53,7 +54,16 @@ export function SpeechBubble({ text, position = "top", visible }: SpeechBubblePr
       <View style={styles.bubble}>
         <Text style={styles.text}>{typedText}</Text>
       </View>
-      <View style={[styles.pointer, position === "right" ? styles.pointerRight : styles.pointerBottom]} />
+      <View
+        style={[
+          styles.pointer,
+          position === "right"
+            ? styles.pointerRight
+            : pointerAlign === "center"
+              ? styles.pointerBottomCenter
+              : styles.pointerBottom,
+        ]}
+      />
     </Animated.View>
   );
 }
@@ -85,6 +95,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     bottom: -6,
     left: 36,
+  },
+  pointerBottomCenter: {
+    borderBottomWidth: 2,
+    bottom: -6,
+    left: "50%",
+    marginLeft: -8,
   },
   pointerRight: {
     borderBottomWidth: 2,

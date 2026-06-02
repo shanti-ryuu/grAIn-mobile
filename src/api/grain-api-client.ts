@@ -5,6 +5,7 @@ import { API_TIMEOUT } from "@/utils/constants";
 import { emitLogout } from "@/utils/authEvents";
 
 export const GRAIN_TOKEN_KEY = "grain_token";
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
 
 type ApiEnvelope<T> = {
   success: boolean;
@@ -222,11 +223,15 @@ export interface AgentActionLogSummary {
 export type RequestParams = Record<string, string | number | boolean | undefined>;
 
 const apiClient = axios.create({
-  baseURL: process.env.EXPO_PUBLIC_API_URL,
+  baseURL: API_BASE_URL,
   timeout: API_TIMEOUT.DEFAULT,
 });
 
 apiClient.interceptors.request.use(async (config) => {
+  if (!API_BASE_URL) {
+    throw new GrainApiError("Mobile API URL is missing. Rebuild the app with EXPO_PUBLIC_API_URL set in the EAS preview environment.");
+  }
+
   const token = await SecureStore.getItemAsync(GRAIN_TOKEN_KEY);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;

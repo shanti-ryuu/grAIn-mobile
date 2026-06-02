@@ -35,6 +35,7 @@ interface AuthContextValue {
     verificationChannel?: "email" | "sms";
   }) => Promise<AuthUser>;
   resendOtp: (payload: { email?: string; phoneNumber?: string; verificationChannel?: "email" | "sms" }) => Promise<string>;
+  refreshUser: () => Promise<AuthUser>;
   logout: () => Promise<void>;
 }
 
@@ -172,9 +173,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     const response = await grainApi.auth.login(identifier, password);
     await SecureStore.setItemAsync(GRAIN_TOKEN_KEY, response.accessToken);
-    setUser(response.user);
+    const currentUser = await grainApi.auth.me(30000).catch(() => response.user);
+    setUser(currentUser);
     setIsAuthenticated(true);
-    return response.user;
+    return currentUser;
   }, []);
 
   const signup = useCallback(
@@ -200,15 +202,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     const response = await grainApi.auth.verifyOtp(payload);
     await SecureStore.setItemAsync(GRAIN_TOKEN_KEY, response.accessToken);
-    setUser(response.user);
+    const currentUser = await grainApi.auth.me(30000).catch(() => response.user);
+    setUser(currentUser);
     setIsAuthenticated(true);
-    return response.user;
+    return currentUser;
   }, []);
 
   const resendOtp = useCallback(async (payload: { email?: string; phoneNumber?: string; verificationChannel?: "email" | "sms" }) => {
     setError(null);
     const response = await grainApi.auth.resendOtp(payload);
     return response.message;
+  }, []);
+
+  const refreshUser = useCallback(async () => {
+    const currentUser = await grainApi.auth.me(30000);
+    setUser(currentUser);
+    setIsAuthenticated(true);
+    return currentUser;
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -219,12 +229,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isReconnecting,
       error,
       login,
+      refreshUser,
       resendOtp,
       signup,
       verifyOtp,
       logout,
     }),
-    [error, isAuthenticated, isLoading, isReconnecting, login, logout, resendOtp, signup, user, verifyOtp],
+    [error, isAuthenticated, isLoading, isReconnecting, login, logout, refreshUser, resendOtp, signup, user, verifyOtp],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

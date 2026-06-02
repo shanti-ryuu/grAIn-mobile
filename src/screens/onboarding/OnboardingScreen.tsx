@@ -10,6 +10,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Butil, ButilMood } from "@/components/mascot/Butil";
 import { SpeechBubble } from "@/components/mascot/SpeechBubble";
@@ -107,10 +108,10 @@ const slides: OnboardingSlide[] = [
   },
 ];
 
-const screenWidth = Dimensions.get("window").width;
-
 export function OnboardingScreen() {
   const { markOnboardingDone } = useTutorial();
+  const insets = useSafeAreaInsets();
+  const screenWidth = Dimensions.get("window").width;
   const [index, setIndex] = useState(0);
   const [language, setLanguage] = useState<Language>("en");
   const [reactionMood, setReactionMood] = useState<ButilMood | null>(null);
@@ -158,29 +159,39 @@ export function OnboardingScreen() {
         data={slides}
         horizontal
         keyExtractor={(item: OnboardingSlide) => String(item.id)}
+        getItemLayout={(_: ArrayLike<OnboardingSlide> | null | undefined, itemIndex: number) => ({
+          length: screenWidth,
+          offset: screenWidth * itemIndex,
+          index: itemIndex,
+        })}
+        style={styles.list}
         onMomentumScrollEnd={onMomentumEnd}
         pagingEnabled
         ref={listRef}
         renderItem={({ item }: { item: OnboardingSlide }) => (
-          <View style={styles.slide}>
+          <View style={[styles.slide, { width: screenWidth }]}>
             <View style={styles.mascotArea}>
               <Butil mood={reactionMood ?? item.butilMood} onPress={replayDialogue} size={150} speaking />
-              <SpeechBubble text={item.butilDialogue[language]} visible />
+              <View style={styles.bubbleWrap}>
+                <SpeechBubble pointerAlign="center" text={item.butilDialogue[language]} visible />
+              </View>
             </View>
-            <View style={styles.dots}>
-              {slides.map((dot) => (
-                <View key={dot.id} style={[styles.dot, dot.id === item.id && styles.dotActive]} />
-              ))}
+            <View style={styles.copyBlock}>
+              <View style={styles.dots}>
+                {slides.map((dot) => (
+                  <View key={dot.id} style={[styles.dot, dot.id === item.id && styles.dotActive]} />
+                ))}
+              </View>
+              <Text style={styles.title}>{item.title[language]}</Text>
+              <Text style={styles.description}>{item.description[language]}</Text>
             </View>
-            <Text style={styles.title}>{item.title[language]}</Text>
-            <Text style={styles.description}>{item.description[language]}</Text>
           </View>
         )}
         showsHorizontalScrollIndicator={false}
       />
 
-      <View style={styles.actions}>
-        <Pressable onPress={() => goToIndex(slides.length - 1)} style={styles.secondaryButton}>
+      <View style={[styles.actions, { paddingBottom: Math.max(insets.bottom + 10, SPACING.lg) }]}>
+        <Pressable onPress={() => void finish()} style={styles.secondaryButton}>
           <Text style={styles.secondaryText}>Skip</Text>
         </Pressable>
         <Pressable
@@ -197,13 +208,30 @@ export function OnboardingScreen() {
 const styles = StyleSheet.create({
   actions: {
     alignItems: "center",
+    backgroundColor: COLORS.background,
+    bottom: 0,
+    elevation: 20,
     flexDirection: "row",
     justifyContent: "space-between",
+    left: 0,
     padding: SPACING.lg,
+    position: "absolute",
+    right: 0,
+    zIndex: 20,
+  },
+  bubbleWrap: {
+    alignItems: "center",
+    marginTop: SPACING.sm,
+    minHeight: 116,
   },
   container: {
     backgroundColor: COLORS.background,
     flex: 1,
+  },
+  copyBlock: {
+    alignItems: "center",
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.sm,
   },
   description: {
     color: COLORS.textSecondary,
@@ -252,11 +280,15 @@ const styles = StyleSheet.create({
     marginRight: SPACING.lg,
     marginTop: 56,
     padding: 3,
+    zIndex: 30,
+  },
+  list: {
+    flex: 1,
   },
   mascotArea: {
     alignItems: "center",
-    height: "50%",
-    justifyContent: "center",
+    justifyContent: "flex-end",
+    minHeight: 430,
     paddingHorizontal: SPACING.lg,
   },
   primaryButton: {
@@ -273,6 +305,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   secondaryButton: {
+    minHeight: 52,
     paddingHorizontal: SPACING.md,
     paddingVertical: 14,
   },
@@ -283,7 +316,8 @@ const styles = StyleSheet.create({
   },
   slide: {
     alignItems: "center",
-    width: screenWidth,
+    flex: 1,
+    paddingBottom: 120,
   },
   title: {
     color: COLORS.textPrimary,

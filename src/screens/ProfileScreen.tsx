@@ -33,7 +33,7 @@ function initials(name: string): string {
 }
 
 export function ProfileScreen() {
-  const { user } = useAuth();
+  const { refreshUser, user } = useAuth();
   const { showToast } = useToast();
   const { handleLogout } = useLogout();
   const { theme } = useTheme();
@@ -95,9 +95,14 @@ export function ProfileScreen() {
   const saveProfile = async () => {
     setIsSaving(true);
     try {
-      await grainApi.profile.update({ name, bio, phoneNumber, location, profileImage });
-      const updated = await grainApi.profile.get();
+      const updated = await grainApi.profile.update({ name, bio, phoneNumber, location, profileImage });
       setProfile(updated);
+      setName(updated.name);
+      setBio(updated.bio ?? "");
+      setPhoneNumber(updated.phoneNumber ?? "");
+      setLocation(updated.location ?? "");
+      setProfileImage(updated.profileImage ?? "");
+      void refreshUser().catch(() => undefined);
       setEditOpen(false);
       showToast("Profile updated", "success");
     } catch (error) {

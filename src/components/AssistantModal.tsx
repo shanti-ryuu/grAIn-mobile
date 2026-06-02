@@ -46,6 +46,29 @@ function fallbackReply(message: string): string {
   return "I am currently offline. Please check your connection.";
 }
 
+function assistantErrorReply(error: unknown, originalMessage: string): string {
+  if (error instanceof Error && error.message && !/network error/i.test(error.message)) {
+    return cleanAssistantText(error.message);
+  }
+
+  return fallbackReply(originalMessage);
+}
+
+function cleanAssistantText(text: string): string {
+  return text
+    .replace(/&#96;|&grave;/g, "'")
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/`([^`\n]{1,80})`/g, "$1")
+    .replace(/^\s*\*\s+/gm, "- ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function messageTime(date: string): string {
   return new Date(date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
@@ -175,10 +198,10 @@ export function AssistantModal() {
           toolCalls: response.toolCalls,
         },
       ]);
-    } catch {
+    } catch (error) {
       setMessages((current) => [
         ...current,
-        { role: "assistant", content: fallbackReply(trimmed), timestamp: new Date().toISOString() },
+        { role: "assistant", content: assistantErrorReply(error, trimmed), timestamp: new Date().toISOString() },
       ]);
     } finally {
       setIsLoading(false);
@@ -255,7 +278,7 @@ export function AssistantModal() {
                   ]}
                 >
                   <Text style={[styles.messageText, { color: item.role === "user" ? "#FFFFFF" : theme.textPrimary }]}>
-                    {item.content}
+                    {item.role === "assistant" ? cleanAssistantText(item.content) : item.content}
                   </Text>
                 </View>
                 {item.actions?.map((action, index) => (

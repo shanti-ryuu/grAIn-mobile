@@ -54,6 +54,12 @@
     },
     "web": {
       "favicon": "./assets/grAIn_favicon_32x32.png"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "ff04f9e4-1496-453a-a4cc-70c61b97be93"
+      }
     }
   }
 }

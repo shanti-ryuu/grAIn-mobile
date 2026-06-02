@@ -47,6 +47,7 @@ export interface AuthResponse {
 }
 
 type MeResponse = AuthUser | { user: AuthUser };
+type ProfileResponse = AuthUser | { user: AuthUser };
 
 export interface VerificationStartResponse {
   message: string;
@@ -201,6 +202,7 @@ export interface AssistantToolCall {
 
 export interface ChatResponse {
   reply: string;
+  modelUsed?: string;
   toolCalls?: AssistantToolCall[];
   actions?: AssistantToolCall[];
 }
@@ -241,7 +243,14 @@ apiClient.interceptors.response.use(
     return response.data;
   },
   async (error: AxiosError<ApiEnvelope<unknown>>) => {
-    if (error.response?.status === 401) {
+    const requestUrl = error.config?.url ?? "";
+    const isAuthFormRequest =
+      requestUrl.includes("/auth/login") ||
+      requestUrl.includes("/auth/register") ||
+      requestUrl.includes("/auth/verify-otp") ||
+      requestUrl.includes("/auth/resend-otp");
+
+    if (error.response?.status === 401 && !isAuthFormRequest) {
       await SecureStore.deleteItemAsync(GRAIN_TOKEN_KEY);
       emitLogout();
     }
@@ -359,12 +368,18 @@ export const grainApi = {
       }),
   },
   profile: {
-    get: () => apiClient.get<AuthUser, AuthUser>("/users/profile"),
+    get: async () => {
+      const response = await apiClient.get<ProfileResponse, ProfileResponse>("/users/profile");
+      return "user" in response ? response.user : response;
+    },
     update: (data: Partial<Pick<AuthUser, "name" | "profileImage">> & {
       bio?: string;
       phoneNumber?: string;
       location?: string;
-    }) => apiClient.patch("/users/profile", data),
+    }) =>
+      apiClient
+        .patch<ProfileResponse, ProfileResponse>("/users/profile", data)
+        .then((response) => ("user" in response ? response.user : response)),
     changePassword: (data: { currentPassword: string; newPassword: string }) =>
       apiClient.post("/users/change-password", data),
   },

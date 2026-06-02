@@ -1,61 +1,47 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Dimensions,
   FlatList,
   KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from "react-native";
 
-import { ChatMessage, DeviceSummary, grainApi } from "@/api/grain-api-client";
+import { AssistantToolCall, ChatMessage, DeviceSummary, grainApi } from "@/api/grain-api-client";
 import { useAssistant } from "@/context/AssistantContext";
+import { useTheme } from "@/context/ThemeContext";
 import { COLORS, SPACING } from "@/utils/constants";
 import { getListData } from "@/utils/data";
 
-type Language = "EN" | "FIL";
-type LocalMessage = ChatMessage & { timestamp: string };
-
-const CHAT_LANG_KEY = "@grain_chat_lang";
-const APP_LANG_KEY = "@grain_app_lang";
-
-const quickPrompts: Record<Language, string[]> = {
-  EN: [
-    "What's the current dryer status?",
-    "How does AUTO mode work?",
-    "Why is 14% the target moisture?",
-    "Diagnose my current readings",
-  ],
-  FIL: [
-    "Ano ang current status ng dryer?",
-    "Paano gumagana ang AUTO mode?",
-    "Bakit 14% ang target moisture?",
-    "I-diagnose ang current readings ko",
-  ],
+type LocalMessage = ChatMessage & {
+  timestamp: string;
+  actions?: AssistantToolCall[];
+  toolCalls?: AssistantToolCall[];
 };
+
+const quickPrompts = [
+  "What's the current dryer status?",
+  "Diagnose my current readings",
+  "How long until target moisture?",
+  "Check recent alerts",
+];
 
 function fallbackReply(message: string): string {
   const text = message.toLowerCase();
   if (/moisture|14%|target/.test(text)) {
     return "The target moisture of 14% wet basis is the safe storage point for rice grain. Below this, the grain is less likely to spoil during storage.";
   }
-  if (/auto mode|automatic/.test(text)) {
-    return "AUTO mode uses the AI prediction engine to estimate moisture drop and recommend dryer settings while watching for completion.";
-  }
   if (/temperature|temp|init/.test(text)) {
     return "Optimal drying temperature is 40-55 C. Above 65 C is critical and can damage grain quality.";
-  }
-  if (/fan|airflow/.test(text)) {
-    return "Fan control manages airflow through the grain bed. Stronger airflow helps remove humid air and improve drying consistency.";
-  }
-  if (/solar|voltage|energy/.test(text)) {
-    return "Solar voltage monitoring helps track available power and estimate dryer energy usage during each session.";
   }
   return "I am currently offline. Please check your connection.";
 }
@@ -64,26 +50,73 @@ function messageTime(date: string): string {
   return new Date(date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function toolStatus(toolCalls?: AssistantToolCall[]): string {
+  const latest = toolCalls?.at(-1)?.name;
+  if (latest === "get_live_sensors") return "Checked sensors";
+  if (latest === "get_ml_prediction") return "Checked prediction";
+  if (latest === "get_session_history") return "Checked sessions";
+  if (latest === "get_alert_history") return "Checked alerts";
+  if (latest === "send_dryer_command") return "Sent command";
+  return "";
+}
+
+function loadingStatus(input: string): string {
+  const text = input.toLowerCase();
+  if (/predict|forecast|how long|target/.test(text)) return "Getting prediction...";
+  if (/alert|warning|error|critical/.test(text)) return "Checking alerts...";
+  if (/start|stop|fan|heater|relay|stepper|command/.test(text)) return "Checking safety...";
+  return "Checking sensors...";
+}
+
+function ActionCard({ action }: { action: AssistantToolCall }) {
+  const { theme } = useTheme();
+  const failed = action.status !== "success";
+  return (
+    <View
+      style={[
+        styles.actionCard,
+        {
+          backgroundColor: failed ? "#FEF2F2" : "#F0FDF4",
+          borderColor: failed ? COLORS.danger : COLORS.success,
+        },
+      ]}
+    >
+      <Ionicons name={failed ? "warning" : "flash"} size={18} color={failed ? COLORS.danger : COLORS.success} />
+      <View style={styles.actionBody}>
+        <Text style={[styles.actionTitle, { color: failed ? COLORS.danger : COLORS.success }]}>
+          {failed ? "Action Failed" : "Command Sent"}
+        </Text>
+        <Text style={[styles.actionText, { color: theme.textPrimary }]}>
+          {action.commandStr ?? action.status} {action.reason ? `- ${action.reason}` : ""}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function TypingDots({ status }: { status: string }) {
+  return (
+    <View style={styles.typingRow}>
+      <ActivityIndicator color={COLORS.primary} />
+      <View>
+        <Text style={styles.typingText}>Assistant is thinking...</Text>
+        <Text style={styles.toolStatusText}>{status}</Text>
+      </View>
+    </View>
+  );
+}
+
 export function AssistantModal() {
   const { isOpen, closeAssistant } = useAssistant();
+  const { theme } = useTheme();
   const [messages, setMessages] = useState<LocalMessage[]>([]);
-  const [language, setLanguage] = useState<Language>("EN");
   const [input, setInput] = useState("");
+  const [lastInput, setLastInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [autonomousMode, setAutonomousMode] = useState(false);
   const [activeDeviceId, setActiveDeviceId] = useState<string | undefined>();
   const listRef = useRef<FlatList<LocalMessage>>(null);
-
-  useEffect(() => {
-    const loadLanguage = async () => {
-      const chatLang = await AsyncStorage.getItem(CHAT_LANG_KEY);
-      const appLang = await AsyncStorage.getItem(APP_LANG_KEY);
-      const nextLang = chatLang ?? appLang;
-      if (nextLang === "EN" || nextLang === "FIL") {
-        setLanguage(nextLang);
-      }
-    };
-    void loadLanguage();
-  }, []);
+  const modalHeight = Dimensions.get("window").height * 0.85;
 
   useEffect(() => {
     if (!isOpen) {
@@ -108,9 +141,9 @@ export function AssistantModal() {
     }
   }, [messages]);
 
-  const changeLanguage = async (nextLanguage: Language) => {
-    setLanguage(nextLanguage);
-    await AsyncStorage.setItem(CHAT_LANG_KEY, nextLanguage);
+  const openHistory = () => {
+    closeAssistant();
+    router.push({ pathname: "/agent-logs", params: activeDeviceId ? { deviceId: activeDeviceId } : {} } as never);
   };
 
   const sendMessage = async (content: string) => {
@@ -123,6 +156,7 @@ export function AssistantModal() {
     const nextMessages = [...messages, userMessage];
     setMessages(nextMessages);
     setInput("");
+    setLastInput(trimmed);
     setIsLoading(true);
 
     try {
@@ -130,10 +164,16 @@ export function AssistantModal() {
         role,
         content: messageContent,
       }));
-      const response = await grainApi.ai.chat(contextMessages, language, activeDeviceId);
+      const response = await grainApi.ai.chat(contextMessages, activeDeviceId, autonomousMode);
       setMessages((current) => [
         ...current,
-        { role: "assistant", content: response.reply, timestamp: new Date().toISOString() },
+        {
+          role: "assistant",
+          content: response.reply,
+          timestamp: new Date().toISOString(),
+          actions: response.actions,
+          toolCalls: response.toolCalls,
+        },
       ]);
     } catch {
       setMessages((current) => [
@@ -146,135 +186,197 @@ export function AssistantModal() {
   };
 
   return (
-    <Modal animationType="slide" visible={isOpen} onRequestClose={closeAssistant}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.container}>
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.title}>grAIn Assistant</Text>
-            <Text style={styles.subtitle}>{activeDeviceId ? `Device: ${activeDeviceId}` : "System assistant"}</Text>
+    <Modal animationType="slide" transparent visible={isOpen} onRequestClose={closeAssistant}>
+      <View style={styles.backdrop}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={[styles.sheet, { backgroundColor: theme.bgBase, height: modalHeight }]}
+        >
+          <View style={[styles.header, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+            <View style={styles.headerTitleWrap}>
+              <Text style={[styles.title, { color: theme.textPrimary }]}>grAIn Assistant</Text>
+              <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+                {activeDeviceId ? `Device: ${activeDeviceId}` : "System assistant"}
+              </Text>
+            </View>
+            <View style={styles.headerActions}>
+              <Pressable accessibilityLabel="AI action history" onPress={openHistory} style={styles.iconButton}>
+                <Ionicons name="time" size={22} color={theme.textPrimary} />
+              </Pressable>
+              <Pressable accessibilityLabel="Close assistant" onPress={closeAssistant} style={styles.iconButton}>
+                <Ionicons name="close" size={24} color={theme.textPrimary} />
+              </Pressable>
+            </View>
           </View>
-          <View style={styles.headerActions}>
-            <View style={styles.languageToggle}>
-              {(["EN", "FIL"] as const).map((item) => (
-                <Pressable
-                  key={item}
-                  onPress={() => void changeLanguage(item)}
-                  style={[styles.langButton, language === item && styles.langButtonActive]}
-                >
-                  <Text style={[styles.langText, language === item && styles.langTextActive]}>{item}</Text>
+
+          <View style={[styles.autoRow, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+            <View style={styles.autoLabelWrap}>
+              <Ionicons name="hardware-chip" size={18} color={theme.accentPrimary} />
+              <Text style={[styles.autoLabel, { color: theme.textPrimary }]}>Auto Control</Text>
+            </View>
+            <Switch
+              onValueChange={setAutonomousMode}
+              thumbColor={autonomousMode ? COLORS.primary : "#F4F4F5"}
+              trackColor={{ false: theme.border, true: theme.accentPrimarySubtle }}
+              value={autonomousMode}
+            />
+          </View>
+
+          {autonomousMode ? (
+            <View style={styles.warningBanner}>
+              <Ionicons name="warning" size={16} color="#92400E" />
+              <Text style={styles.warningText}>AI may send commands automatically when safety rules require it.</Text>
+            </View>
+          ) : null}
+
+          {messages.length === 0 ? (
+            <View style={styles.quickWrap}>
+              {quickPrompts.map((prompt) => (
+                <Pressable key={prompt} onPress={() => void sendMessage(prompt)} style={[styles.quickPrompt, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+                  <Text style={[styles.quickText, { color: theme.textPrimary }]}>{prompt}</Text>
                 </Pressable>
               ))}
             </View>
-            <Pressable onPress={closeAssistant} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color={COLORS.textPrimary} />
+          ) : null}
+
+          <FlatList
+            contentContainerStyle={styles.messageList}
+            data={messages}
+            keyExtractor={(item: LocalMessage, index: number) => `${item.timestamp}-${index}`}
+            ref={listRef}
+            renderItem={({ item }: { item: LocalMessage }) => (
+              <View style={[styles.bubbleWrap, item.role === "user" ? styles.userBubbleWrap : styles.assistantBubbleWrap]}>
+                <View
+                  style={[
+                    styles.bubble,
+                    item.role === "user"
+                      ? styles.userBubble
+                      : { backgroundColor: theme.bgCard, borderColor: theme.border, borderWidth: 1 },
+                  ]}
+                >
+                  <Text style={[styles.messageText, { color: item.role === "user" ? "#FFFFFF" : theme.textPrimary }]}>
+                    {item.content}
+                  </Text>
+                </View>
+                {item.actions?.map((action, index) => (
+                  <ActionCard action={action} key={`${action.commandStr ?? action.status}-${index}`} />
+                ))}
+                {toolStatus(item.toolCalls) ? <Text style={styles.toolStatusText}>{toolStatus(item.toolCalls)}</Text> : null}
+                <Text style={[styles.timestamp, { color: theme.textSecondary }]}>{messageTime(item.timestamp)}</Text>
+              </View>
+            )}
+          />
+
+          {isLoading ? <TypingDots status={loadingStatus(lastInput)} /> : null}
+
+          <View style={[styles.inputRow, { backgroundColor: theme.bgBase }]}>
+            <TextInput
+              maxLength={500}
+              multiline
+              onChangeText={setInput}
+              placeholder="Ask about dryer status, predictions, or controls..."
+              placeholderTextColor={theme.textSecondary}
+              style={[
+                styles.input,
+                { backgroundColor: theme.bgCard, borderColor: theme.border, color: theme.textPrimary },
+              ]}
+              value={input}
+            />
+            <Pressable disabled={isLoading || !input.trim()} onPress={() => void sendMessage(input)} style={[styles.sendButton, (isLoading || !input.trim()) && styles.disabledButton]}>
+              <Ionicons name="send" size={20} color="#FFFFFF" />
             </Pressable>
           </View>
-        </View>
-
-        {messages.length === 0 ? (
-          <View style={styles.quickWrap}>
-            {quickPrompts[language].map((prompt) => (
-              <Pressable key={prompt} onPress={() => void sendMessage(prompt)} style={styles.quickPrompt}>
-                <Text style={styles.quickText}>{prompt}</Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
-
-        <FlatList
-          contentContainerStyle={styles.messageList}
-          data={messages}
-          keyExtractor={(item: LocalMessage, index: number) => `${item.timestamp}-${index}`}
-          ref={listRef}
-          renderItem={({ item }: { item: LocalMessage }) => (
-            <View style={[styles.bubbleWrap, item.role === "user" ? styles.userBubbleWrap : styles.assistantBubbleWrap]}>
-              <View style={[styles.bubble, item.role === "user" ? styles.userBubble : styles.assistantBubble]}>
-                <Text style={[styles.messageText, item.role === "user" ? styles.userText : styles.assistantText]}>
-                  {item.content}
-                </Text>
-              </View>
-              <Text style={styles.timestamp}>{messageTime(item.timestamp)}</Text>
-            </View>
-          )}
-        />
-
-        {isLoading ? (
-          <View style={styles.typingRow}>
-            <ActivityIndicator color={COLORS.primary} />
-            <Text style={styles.typingText}>Assistant is typing...</Text>
-          </View>
-        ) : null}
-
-        <View style={styles.inputRow}>
-          <TextInput
-            maxLength={500}
-            multiline
-            onChangeText={setInput}
-            placeholder="Ask about dryer status, moisture, or controls..."
-            style={styles.input}
-            value={input}
-          />
-          <Pressable disabled={isLoading || !input.trim()} onPress={() => void sendMessage(input)} style={styles.sendButton}>
-            <Ionicons name="send" size={20} color="#FFFFFF" />
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  assistantBubble: {
-    backgroundColor: COLORS.card,
-    borderColor: COLORS.border,
+  actionBody: {
+    flex: 1,
+  },
+  actionCard: {
+    alignItems: "flex-start",
+    borderRadius: 14,
     borderWidth: 1,
+    flexDirection: "row",
+    gap: SPACING.sm,
+    marginTop: SPACING.xs,
+    maxWidth: "88%",
+    padding: SPACING.sm,
+  },
+  actionText: {
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
+  },
+  actionTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    marginBottom: 2,
   },
   assistantBubbleWrap: {
     alignItems: "flex-start",
   },
-  assistantText: {
-    color: COLORS.textPrimary,
+  autoLabel: {
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  autoLabelWrap: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: SPACING.xs,
+  },
+  autoRow: {
+    alignItems: "center",
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+  },
+  backdrop: {
+    backgroundColor: "rgba(0,0,0,0.35)",
+    flex: 1,
+    justifyContent: "flex-end",
   },
   bubble: {
     borderRadius: 18,
-    maxWidth: "82%",
+    maxWidth: "84%",
     padding: SPACING.md,
   },
   bubbleWrap: {
     gap: 3,
     marginBottom: SPACING.md,
   },
-  closeButton: {
-    alignItems: "center",
-    height: 38,
-    justifyContent: "center",
-    width: 38,
-  },
-  container: {
-    backgroundColor: COLORS.background,
-    flex: 1,
+  disabledButton: {
+    opacity: 0.55,
   },
   header: {
     alignItems: "center",
-    backgroundColor: COLORS.card,
-    borderBottomColor: COLORS.border,
     borderBottomWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
     padding: SPACING.md,
-    paddingTop: 54,
   },
   headerActions: {
-    alignItems: "center",
     flexDirection: "row",
-    gap: SPACING.sm,
+    gap: SPACING.xs,
+  },
+  headerTitleWrap: {
+    flex: 1,
+    paddingRight: SPACING.sm,
+  },
+  iconButton: {
+    alignItems: "center",
+    height: 40,
+    justifyContent: "center",
+    width: 40,
   },
   input: {
-    backgroundColor: COLORS.card,
-    borderColor: COLORS.border,
     borderRadius: 18,
     borderWidth: 1,
-    color: COLORS.textPrimary,
     flex: 1,
     maxHeight: 110,
     minHeight: 48,
@@ -283,50 +385,24 @@ const styles = StyleSheet.create({
   },
   inputRow: {
     alignItems: "flex-end",
-    backgroundColor: COLORS.background,
     flexDirection: "row",
     gap: SPACING.sm,
     padding: SPACING.md,
   },
-  langButton: {
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  langButtonActive: {
-    backgroundColor: COLORS.primary,
-  },
-  languageToggle: {
-    backgroundColor: "#EEF2F7",
-    borderRadius: 12,
-    flexDirection: "row",
-    padding: 3,
-  },
-  langText: {
-    color: COLORS.textSecondary,
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  langTextActive: {
-    color: "#FFFFFF",
-  },
   messageList: {
     padding: SPACING.md,
-    paddingBottom: SPACING.xl,
+    paddingBottom: SPACING.lg,
   },
   messageText: {
     fontSize: 15,
     lineHeight: 21,
   },
   quickPrompt: {
-    backgroundColor: COLORS.card,
-    borderColor: COLORS.border,
     borderRadius: 16,
     borderWidth: 1,
     padding: SPACING.md,
   },
   quickText: {
-    color: COLORS.textPrimary,
     fontSize: 14,
     fontWeight: "800",
   },
@@ -342,31 +418,39 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 48,
   },
+  sheet: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: "hidden",
+  },
   subtitle: {
-    color: COLORS.textSecondary,
     fontSize: 12,
     fontWeight: "700",
   },
   timestamp: {
-    color: COLORS.textSecondary,
     fontSize: 11,
     fontWeight: "700",
   },
   title: {
-    color: COLORS.textPrimary,
     fontSize: 21,
     fontWeight: "900",
+  },
+  toolStatusText: {
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontWeight: "800",
   },
   typingRow: {
     alignItems: "center",
     flexDirection: "row",
     gap: SPACING.sm,
     paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
   },
   typingText: {
     color: COLORS.textSecondary,
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   userBubble: {
     backgroundColor: COLORS.primary,
@@ -374,7 +458,18 @@ const styles = StyleSheet.create({
   userBubbleWrap: {
     alignItems: "flex-end",
   },
-  userText: {
-    color: "#FFFFFF",
+  warningBanner: {
+    alignItems: "center",
+    backgroundColor: "#FEF3C7",
+    flexDirection: "row",
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+  },
+  warningText: {
+    color: "#92400E",
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "800",
   },
 });

@@ -110,6 +110,16 @@ export function SettingsScreen() {
           </View>
           <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
         </Pressable>
+        <Pressable onPress={() => router.push("/agent-logs" as never)} style={styles.profileRow}>
+          <View style={styles.profileIcon}>
+            <Ionicons name="time" size={22} color="#FFFFFF" />
+          </View>
+          <View style={styles.profileText}>
+            <Text style={[styles.rowTitle, { color: theme.textPrimary }]}>AI Action History</Text>
+            <Text style={[styles.rowSubtitle, { color: theme.textSecondary }]}>Review assistant checks and commands</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+        </Pressable>
         <Pressable onPress={() => void handleLogout()} style={styles.logoutButton}>
           <Text style={styles.logoutText}>Log Out</Text>
         </Pressable>

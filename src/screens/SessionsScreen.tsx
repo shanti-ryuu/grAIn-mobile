@@ -203,23 +203,23 @@ export function SessionsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bgBase }]}>
+      <View style={[styles.header, { backgroundColor: theme.bgBase }]}>
+        <View style={styles.headerText}>
+          <Text style={[styles.title, { color: theme.textPrimary }]}>Drying Sessions</Text>
+          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Track moisture progress from start to finish.</Text>
+        </View>
+        <Pressable onPress={openStartModal} style={styles.startSessionButton}>
+          <Ionicons name="add" size={20} color="#FFFFFF" />
+          <Text style={styles.startSessionText}>Start</Text>
+        </Pressable>
+      </View>
+
       <FlatList
         contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}
         data={historySessions}
         keyExtractor={(item: SessionSummary) => item._id}
         ListHeaderComponent={
           <View style={styles.headerContent}>
-            <View style={styles.header}>
-              <View>
-                <Text style={[styles.title, { color: theme.textPrimary }]}>Drying Sessions</Text>
-                <Text style={[styles.subtitle, { color: theme.textSecondary }]}>Track moisture progress from start to finish.</Text>
-              </View>
-              <Pressable onPress={openStartModal} style={styles.startSessionButton}>
-                <Ionicons name="add" size={20} color="#FFFFFF" />
-                <Text style={styles.startSessionText}>Start</Text>
-              </Pressable>
-            </View>
-
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
             {activeSession ? (
@@ -408,6 +408,7 @@ const styles = StyleSheet.create({
   content: {
     gap: SPACING.md,
     padding: SPACING.md,
+    paddingTop: 0,
     paddingBottom: 120,
   },
   disabledButton: {
@@ -431,9 +432,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
+    padding: SPACING.md,
+    paddingBottom: SPACING.sm,
   },
   headerContent: {
     gap: SPACING.md,
+  },
+  headerText: {
+    flex: 1,
+    paddingRight: SPACING.md,
   },
   listHeader: {
     alignItems: "center",

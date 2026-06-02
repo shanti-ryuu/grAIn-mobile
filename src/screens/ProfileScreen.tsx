@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -15,9 +17,11 @@ import { AuthUser, grainApi } from "@/api/grain-api-client";
 import { Card } from "@/components/Card";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import { useToast } from "@/context/ToastContext";
 import { useLogout } from "@/hooks/useLogout";
 import { COLORS, SPACING } from "@/utils/constants";
+import { useBottomTabPadding } from "@/utils/layout";
 
 function initials(name: string): string {
   return name
@@ -32,12 +36,15 @@ export function ProfileScreen() {
   const { user } = useAuth();
   const { showToast } = useToast();
   const { handleLogout } = useLogout();
+  const { theme } = useTheme();
+  const bottomPadding = useBottomTabPadding(44);
   const [profile, setProfile] = useState<AuthUser | null>(user);
   const [editOpen, setEditOpen] = useState(false);
   const [name, setName] = useState(user?.name ?? "");
   const [bio, setBio] = useState(user?.bio ?? "");
   const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber ?? "");
   const [location, setLocation] = useState(user?.location ?? "");
+  const [profileImage, setProfileImage] = useState(user?.profileImage ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -52,16 +59,43 @@ export function ProfileScreen() {
         setBio(result.bio ?? "");
         setPhoneNumber(result.phoneNumber ?? "");
         setLocation(result.location ?? "");
+        setProfileImage(result.profileImage ?? "");
       })
       .catch(() => undefined);
   }, []);
 
   const avatarText = useMemo(() => initials(profile?.name ?? "User"), [profile?.name]);
 
+  const pickProfileImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      showToast("Photo access is needed to choose a profile picture", "warning");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      base64: true,
+      mediaTypes: ["images"],
+      quality: 0.45,
+    });
+
+    if (result.canceled || !result.assets[0]) {
+      return;
+    }
+
+    const asset = result.assets[0];
+    const nextImage = asset.base64
+      ? `data:${asset.mimeType ?? "image/jpeg"};base64,${asset.base64}`
+      : asset.uri;
+    setProfileImage(nextImage);
+  };
+
   const saveProfile = async () => {
     setIsSaving(true);
     try {
-      await grainApi.profile.update({ name, bio, phoneNumber, location });
+      await grainApi.profile.update({ name, bio, phoneNumber, location, profileImage });
       const updated = await grainApi.profile.get();
       setProfile(updated);
       setEditOpen(false);
@@ -98,21 +132,33 @@ export function ProfileScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={[styles.container, { backgroundColor: theme.bgBase }]}
+      contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}
+    >
       <Card style={styles.profileCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{avatarText}</Text>
-        </View>
-        <Text style={styles.name}>{profile?.name ?? "User"}</Text>
-        <Text style={styles.email}>{profile?.email ?? ""}</Text>
+        <Pressable onPress={() => setEditOpen(true)} style={styles.avatarButton}>
+          <View style={[styles.avatar, { backgroundColor: theme.accentPrimary }]}>
+            {profile?.profileImage ? (
+              <Image source={{ uri: profile.profileImage }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>{avatarText}</Text>
+            )}
+          </View>
+          <View style={[styles.avatarEditBadge, { backgroundColor: theme.accentPrimary }]}>
+            <Ionicons name="camera" size={15} color="#FFFFFF" />
+          </View>
+        </Pressable>
+        <Text style={[styles.name, { color: theme.textPrimary }]}>{profile?.name ?? "User"}</Text>
+        <Text style={[styles.email, { color: theme.textSecondary }]}>{profile?.email ?? ""}</Text>
         <StatusBadge status={profile?.role ?? "farmer"} size="sm" />
       </Card>
 
       <Card style={styles.card}>
         <View style={styles.rowBetween}>
-          <Text style={styles.cardTitle}>Info</Text>
+          <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>Info</Text>
           <Pressable onPress={() => setEditOpen(true)} style={styles.iconButton}>
-            <Ionicons name="create" size={20} color={COLORS.primary} />
+            <Ionicons name="create" size={20} color={theme.accentPrimary} />
           </Pressable>
         </View>
         <InfoLine label="Bio" value={profile?.bio ?? "Not set"} />
@@ -121,26 +167,29 @@ export function ProfileScreen() {
       </Card>
 
       <Card style={styles.card}>
-        <Text style={styles.cardTitle}>Change Password</Text>
+        <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>Change Password</Text>
         <TextInput
           onChangeText={setCurrentPassword}
           placeholder="Current password"
+          placeholderTextColor={theme.textSecondary}
           secureTextEntry
-          style={styles.input}
+          style={[styles.input, { backgroundColor: theme.bgElevated, borderColor: theme.border, color: theme.textPrimary }]}
           value={currentPassword}
         />
         <TextInput
           onChangeText={setNewPassword}
           placeholder="New password"
+          placeholderTextColor={theme.textSecondary}
           secureTextEntry
-          style={styles.input}
+          style={[styles.input, { backgroundColor: theme.bgElevated, borderColor: theme.border, color: theme.textPrimary }]}
           value={newPassword}
         />
         <TextInput
           onChangeText={setConfirmPassword}
           placeholder="Confirm new password"
+          placeholderTextColor={theme.textSecondary}
           secureTextEntry
-          style={styles.input}
+          style={[styles.input, { backgroundColor: theme.bgElevated, borderColor: theme.border, color: theme.textPrimary }]}
           value={confirmPassword}
         />
         <Pressable disabled={isSaving} onPress={changePassword} style={styles.primaryButton}>
@@ -154,17 +203,67 @@ export function ProfileScreen() {
 
       <Modal animationType="slide" transparent visible={editOpen} onRequestClose={() => setEditOpen(false)}>
         <View style={styles.modalBackdrop}>
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, { backgroundColor: theme.bgCard }]}>
             <View style={styles.rowBetween}>
-              <Text style={styles.cardTitle}>Edit Profile</Text>
+              <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>Edit Profile</Text>
               <Pressable onPress={() => setEditOpen(false)}>
-                <Ionicons name="close" size={24} color={COLORS.textPrimary} />
+                <Ionicons name="close" size={24} color={theme.textPrimary} />
               </Pressable>
             </View>
-            <TextInput onChangeText={setName} placeholder="Name" style={styles.input} value={name} />
-            <TextInput multiline onChangeText={setBio} placeholder="Bio" style={[styles.input, styles.textArea]} value={bio} />
-            <TextInput onChangeText={setPhoneNumber} placeholder="Phone number" style={styles.input} value={phoneNumber} />
-            <TextInput onChangeText={setLocation} placeholder="Location" style={styles.input} value={location} />
+
+            <View style={styles.photoEditor}>
+              <View style={[styles.editAvatar, { backgroundColor: theme.accentPrimary }]}>
+                {profileImage ? (
+                  <Image source={{ uri: profileImage }} style={styles.editAvatarImage} />
+                ) : (
+                  <Text style={styles.editAvatarText}>{avatarText}</Text>
+                )}
+              </View>
+              <View style={styles.photoActions}>
+                <Pressable
+                  onPress={pickProfileImage}
+                  style={[styles.photoButton, { borderColor: theme.border, backgroundColor: theme.bgElevated }]}
+                >
+                  <Ionicons name="image" size={18} color={theme.accentPrimary} />
+                  <Text style={[styles.photoButtonText, { color: theme.textPrimary }]}>Choose Photo</Text>
+                </Pressable>
+                {profileImage ? (
+                  <Pressable onPress={() => setProfileImage("")} style={styles.removePhotoButton}>
+                    <Text style={styles.removePhotoText}>Remove</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+
+            <TextInput
+              onChangeText={setName}
+              placeholder="Name"
+              placeholderTextColor={theme.textSecondary}
+              style={[styles.input, { backgroundColor: theme.bgElevated, borderColor: theme.border, color: theme.textPrimary }]}
+              value={name}
+            />
+            <TextInput
+              multiline
+              onChangeText={setBio}
+              placeholder="Bio"
+              placeholderTextColor={theme.textSecondary}
+              style={[styles.input, styles.textArea, { backgroundColor: theme.bgElevated, borderColor: theme.border, color: theme.textPrimary }]}
+              value={bio}
+            />
+            <TextInput
+              onChangeText={setPhoneNumber}
+              placeholder="Phone number"
+              placeholderTextColor={theme.textSecondary}
+              style={[styles.input, { backgroundColor: theme.bgElevated, borderColor: theme.border, color: theme.textPrimary }]}
+              value={phoneNumber}
+            />
+            <TextInput
+              onChangeText={setLocation}
+              placeholder="Location"
+              placeholderTextColor={theme.textSecondary}
+              style={[styles.input, { backgroundColor: theme.bgElevated, borderColor: theme.border, color: theme.textPrimary }]}
+              value={location}
+            />
             <Pressable disabled={isSaving} onPress={saveProfile} style={styles.primaryButton}>
               {isSaving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>Save Profile</Text>}
             </Pressable>
@@ -176,10 +275,11 @@ export function ProfileScreen() {
 }
 
 function InfoLine({ label, value }: { label: string; value: string }) {
+  const { theme } = useTheme();
   return (
     <View style={styles.infoLine}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
+      <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>{label}</Text>
+      <Text style={[styles.infoValue, { color: theme.textPrimary }]}>{value}</Text>
     </View>
   );
 }
@@ -191,6 +291,26 @@ const styles = StyleSheet.create({
     borderRadius: 38,
     height: 76,
     justifyContent: "center",
+    width: 76,
+  },
+  avatarButton: {
+    position: "relative",
+  },
+  avatarEditBadge: {
+    alignItems: "center",
+    borderColor: "#FFFFFF",
+    borderRadius: 15,
+    borderWidth: 2,
+    bottom: -1,
+    height: 30,
+    justifyContent: "center",
+    position: "absolute",
+    right: -5,
+    width: 30,
+  },
+  avatarImage: {
+    borderRadius: 38,
+    height: 76,
     width: 76,
   },
   avatarText: {
@@ -219,6 +339,23 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: 14,
     fontWeight: "700",
+  },
+  editAvatar: {
+    alignItems: "center",
+    borderRadius: 36,
+    height: 72,
+    justifyContent: "center",
+    overflow: "hidden",
+    width: 72,
+  },
+  editAvatarImage: {
+    height: 72,
+    width: 72,
+  },
+  editAvatarText: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "900",
   },
   iconButton: {
     alignItems: "center",
@@ -292,6 +429,38 @@ const styles = StyleSheet.create({
   profileCard: {
     alignItems: "center",
     gap: SPACING.sm,
+  },
+  photoActions: {
+    flex: 1,
+    gap: SPACING.sm,
+  },
+  photoButton: {
+    alignItems: "center",
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: SPACING.sm,
+    minHeight: 46,
+    justifyContent: "center",
+    paddingHorizontal: SPACING.md,
+  },
+  photoButtonText: {
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  photoEditor: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: SPACING.md,
+  },
+  removePhotoButton: {
+    alignSelf: "flex-start",
+    paddingVertical: 2,
+  },
+  removePhotoText: {
+    color: COLORS.danger,
+    fontSize: 13,
+    fontWeight: "900",
   },
   rowBetween: {
     alignItems: "center",

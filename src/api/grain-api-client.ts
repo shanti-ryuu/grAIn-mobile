@@ -192,8 +192,29 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface AssistantToolCall {
+  name: string;
+  status: "success" | "failed" | "device_offline";
+  commandStr?: string;
+  reason?: string;
+}
+
 export interface ChatResponse {
   reply: string;
+  toolCalls?: AssistantToolCall[];
+  actions?: AssistantToolCall[];
+}
+
+export interface AgentActionLogSummary {
+  _id: string;
+  deviceId: string;
+  action: string;
+  commandType?: string;
+  commandStr?: string;
+  reason: string;
+  autonomousMode: boolean;
+  result?: "success" | "failed" | "device_offline";
+  createdAt: string;
 }
 
 export type RequestParams = Record<string, string | number | boolean | undefined>;
@@ -330,8 +351,12 @@ export const grainApi = {
   },
   ai: {
     predict: (payload: Record<string, unknown>) => apiClient.post<PredictionResponse, PredictionResponse>("/ai/predict", payload),
-    chat: (messages: ChatMessage[], language: "EN" | "FIL", deviceId?: string) =>
-      apiClient.post<ChatResponse, ChatResponse>("/assistant/chat", { messages, language, deviceId }),
+    chat: (messages: ChatMessage[], deviceId?: string, autonomousMode = false) =>
+      apiClient.post<ChatResponse, ChatResponse>("/assistant/chat", { messages, deviceId, autonomousMode }),
+    actionLogs: (deviceId: string, params?: { page?: number; limit?: number }) =>
+      apiClient.get<PaginatedResponse<AgentActionLogSummary>, PaginatedResponse<AgentActionLogSummary>>("/assistant/logs", {
+        params: { deviceId, ...params },
+      }),
   },
   profile: {
     get: () => apiClient.get<AuthUser, AuthUser>("/users/profile"),

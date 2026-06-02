@@ -67,6 +67,7 @@ export default function AppLayout() {
           ))}
           <Tabs.Screen name="device/[id]" options={{ href: null }} />
           <Tabs.Screen name="ai-prediction" options={{ href: null }} />
+          <Tabs.Screen name="agent-logs" options={{ href: null }} />
           <Tabs.Screen name="profile" options={{ href: null }} />
           <Tabs.Screen name="add-device" options={{ href: null }} />
         </Tabs>

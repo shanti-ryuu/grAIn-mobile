@@ -47,6 +47,18 @@
           "color": "#2D5A27"
         }
       ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow grAIn to scan device claim QR codes."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "grAIn needs your location to provide accurate weather-based drying recommendations."
+        }
+      ],
       "expo-asset"
     ],
     "experiments": {

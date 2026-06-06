@@ -18,6 +18,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { useTheme } from "@/context/ThemeContext";
 import { useAIPrediction } from "@/hooks/useAIPrediction";
 import { useDevices } from "@/hooks/useDevices";
+import { useWeather } from "@/hooks/useWeather";
 import { chartConfig } from "@/utils/chart";
 import { COLORS, SPACING } from "@/utils/constants";
 import { getListData, relativeTime } from "@/utils/data";
@@ -73,6 +74,7 @@ function EfficiencyRing({ score }: { score: number }) {
 export function AIPredictionScreen() {
   const { devices } = useDevices();
   const { prediction, isLoading, error, lastFetchedAt, predict } = useAIPrediction();
+  const weatherQuery = useWeather(true);
   const [selectedDevice, setSelectedDevice] = useState<DeviceSummary | null>(null);
   const [metricsOpen, setMetricsOpen] = useState(false);
   const { theme } = useTheme();
@@ -105,6 +107,14 @@ export function AIPredictionScreen() {
       timeElapsed: 0,
       solarVoltage: latest.solarVoltage,
       energyConsumed: latest.energy,
+      weatherContext: weatherQuery.weather
+        ? {
+            outdoorHumidity: weatherQuery.weather.current.humidity,
+            outdoorTemperature: weatherQuery.weather.current.temperature,
+            cloudCover: weatherQuery.weather.current.cloudCover,
+            windSpeed: weatherQuery.weather.current.windSpeed,
+          }
+        : undefined,
     });
   };
 
@@ -162,6 +172,15 @@ export function AIPredictionScreen() {
         <Text style={[styles.bodyText, { color: theme.textSecondary }]}>
           {prediction?.recommendation ?? "Select a device and fetch a prediction from current sensor data."}
         </Text>
+        {prediction?.weatherEnhanced ? (
+          <View style={styles.weatherBadge}>
+            <Ionicons name="partly-sunny-outline" size={16} color={COLORS.primary} />
+            <Text style={styles.weatherBadgeText}>Weather-Enhanced</Text>
+          </View>
+        ) : null}
+        {prediction?.dryingConditionNote ? (
+          <Text style={[styles.conditionNote, { color: theme.textSecondary }]}>{prediction.dryingConditionNote}</Text>
+        ) : null}
         <View style={styles.metricRow}>
           <Text style={[styles.metricText, { color: theme.textSecondary }]}>Confidence: {prediction ? `${prediction.confidence.toFixed(0)}%` : "--"}</Text>
           <Text style={[styles.metricText, { color: theme.textSecondary }]}>Algorithm: {prediction?.algorithm ?? "--"}</Text>
@@ -278,6 +297,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: "800",
+  },
+  conditionNote: {
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 18,
   },
   container: {
     backgroundColor: COLORS.background,
@@ -401,5 +425,22 @@ const styles = StyleSheet.create({
     color: COLORS.warning,
     fontSize: 12,
     fontWeight: "800",
+  },
+  weatherBadge: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "#ECFDF5",
+    borderColor: "#BBF7D0",
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  weatherBadgeText: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: "900",
   },
 });

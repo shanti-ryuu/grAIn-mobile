@@ -2,7 +2,6 @@ import axios, { AxiosError, AxiosRequestConfig } from "axios";
 import * as SecureStore from "expo-secure-store";
 
 import { API_TIMEOUT } from "@/utils/constants";
-import { emitLogout } from "@/utils/authEvents";
 
 export const GRAIN_TOKEN_KEY = "grain_token";
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -84,6 +83,27 @@ export interface DeviceSummary {
   runtimeState?: Record<string, unknown>;
 }
 
+export interface ClaimedDeviceSummary {
+  id: string;
+  deviceId: string;
+  name: string;
+  location: string;
+}
+
+export interface ClaimDeviceResponse {
+  message: string;
+  alreadyClaimed?: boolean;
+  device?: ClaimedDeviceSummary;
+}
+
+export interface ClaimTokenResponse {
+  claimUrl: string;
+  deviceId: string;
+  deviceName?: string;
+  expiresAt: string;
+  expiresInHours?: number;
+}
+
 export interface SessionSummary {
   _id: string;
   deviceId: string;
@@ -146,6 +166,9 @@ export interface PredictionResponse {
   projectedCurve?: { minutesFromNow: number; predictedMoisture: number }[];
   targetMoisture: number;
   algorithm: string;
+  weatherEnhanced?: boolean;
+  weatherContext?: WeatherContext | null;
+  dryingConditionNote?: string;
   modelMetrics?: {
     moistureR2?: number;
     moistureR2_rf?: number | null;
@@ -154,6 +177,66 @@ export interface PredictionResponse {
     rfWeight?: number | null;
     xgbWeight?: number | null;
   };
+}
+
+export interface WeatherContext {
+  outdoorHumidity: number;
+  outdoorTemperature: number;
+  cloudCover: number;
+  windSpeed: number;
+}
+
+export interface WeatherData {
+  current: {
+    temperature: number;
+    feelsLike: number;
+    humidity: number;
+    pressure: number;
+    windSpeed: number;
+    windDirection: number;
+    cloudCover: number;
+    visibility: number;
+    uvIndex: number;
+    description: string;
+    icon: string;
+    iconUrl: string;
+    cityName: string;
+    country: string;
+    sunrise: string;
+    sunset: string;
+    timestamp: string;
+  };
+  forecast: {
+    datetime: string;
+    temperature: number;
+    humidity: number;
+    description: string;
+    icon: string;
+    iconUrl: string;
+    rainProbability: number;
+    windSpeed: number;
+  }[];
+  dryingAdvice: {
+    recommendation: string;
+    suitable: boolean;
+    reason: string;
+    optimalWindow: string | null;
+  };
+  location: {
+    lat: number;
+    lon: number;
+    cityName: string;
+    country: string;
+  };
+}
+
+export interface AssistantWeatherData {
+  temperature: number;
+  humidity: number;
+  description: string;
+  suitable: boolean;
+  recommendation: string;
+  cityName: string;
 }
 
 export interface NotificationSummary {
@@ -185,8 +268,113 @@ export interface AnalyticsOverview {
   totalAlerts: number;
   criticalAlerts: number;
   recentSessions: SessionSummary[];
-  moistureTrend: { timestamp: string; avgMoisture: number }[];
-  energyTrend: { timestamp: string; totalEnergy: number }[];
+  moistureTrend: {
+    timestamp?: string;
+    date: string;
+    avgMoisture?: number;
+    avgStartMoisture: number;
+    avgFinalMoisture: number;
+    avgReduction: number;
+    sessionCount: number;
+  }[];
+  energyTrend: { timestamp?: string; date: string; totalEnergy: number; avgEnergy: number; sessionCount: number }[];
+  totals?: {
+    sessions: number;
+    completedSessions: number;
+    activeSessions: number;
+    devices: number;
+    alerts: number;
+  };
+  kpis?: {
+    avgEfficiency: number;
+    avgDryingTime: number;
+    avgEnergyPerSession: number;
+    avgMoistureReduction: number;
+    totalGrainDried: number;
+    successRate: number;
+  };
+  efficiencyTrend?: { date: string; avgEfficiency: number; sessionCount: number }[];
+  dryingTimeTrend?: { date: string; avgDurationMinutes: number; sessionCount: number }[];
+  sessionBreakdown?: {
+    completed: number;
+    aborted: number;
+    active: number;
+  };
+  bestSession?: AnalyticsSessionRank | null;
+  worstSession?: AnalyticsSessionRank | null;
+  alertBreakdown?: {
+    critical: number;
+    warning: number;
+    info: number;
+  };
+  period?: "daily" | "weekly" | "monthly";
+  deviceId?: string | null;
+  generatedAt?: string;
+}
+
+export interface AnalyticsSessionRank {
+  id: string;
+  _id?: string;
+  efficiency: number;
+  duration: number;
+  startMoisture: number;
+  finalMoisture: number;
+  startedAt: string;
+}
+
+export interface SessionReportData {
+  session: {
+    id: string;
+    deviceId: string;
+    deviceName: string;
+    grainType: string;
+    status: string;
+    startMoisture: number;
+    targetMoisture: number;
+    finalMoisture: number;
+    startWeight: number;
+    finalWeight: number;
+    totalEnergyUsed: number;
+    avgTemperature: number;
+    avgHumidity: number;
+    avgFanSpeed: number;
+    efficiency: number;
+    duration: number;
+    startedAt: string;
+    completedAt: string;
+    dataPoints: number;
+  };
+  sensorReadings: {
+    timestamp: string;
+    minutesElapsed: number;
+    temperature: number;
+    humidity: number;
+    moisture: number;
+    fanSpeed: number;
+    energy: number;
+    solarVoltage: number;
+  }[];
+  predictions: {
+    predictedMoisture30min: number;
+    recommendationType: string;
+    recommendation: string;
+    efficiencyScore: number;
+    confidence: number;
+    createdAt: string;
+  }[];
+  alerts: {
+    type: string;
+    message: string;
+    severity: number;
+    createdAt: string;
+  }[];
+  grainQuality: {
+    grade: "A" | "B" | "C" | "F";
+    millingRecoveryEstimate: number;
+    aflatoxinRisk: "low" | "medium" | "high";
+    storageRecommendation: string;
+    qualityScore: number;
+  };
 }
 
 export interface ChatMessage {
@@ -248,18 +436,6 @@ apiClient.interceptors.response.use(
     return response.data;
   },
   async (error: AxiosError<ApiEnvelope<unknown>>) => {
-    const requestUrl = error.config?.url ?? "";
-    const isAuthFormRequest =
-      requestUrl.includes("/auth/login") ||
-      requestUrl.includes("/auth/register") ||
-      requestUrl.includes("/auth/verify-otp") ||
-      requestUrl.includes("/auth/resend-otp");
-
-    if (error.response?.status === 401 && !isAuthFormRequest) {
-      await SecureStore.deleteItemAsync(GRAIN_TOKEN_KEY);
-      emitLogout();
-    }
-
     const envelope = error.response?.data;
     const message = envelope?.error ?? error.message ?? "Unable to complete request. Please try again.";
     return Promise.reject(
@@ -309,6 +485,10 @@ export const grainApi = {
     getById: (id: string) => apiClient.get<DeviceSummary, DeviceSummary>(`/devices/${id}`),
     register: (deviceId: string, location?: string) =>
       apiClient.post<DeviceSummary, DeviceSummary>("/devices", { deviceId, location }),
+    claimDevice: (deviceId: string, token: string) =>
+      apiClient.post<ClaimDeviceResponse, ClaimDeviceResponse>(`/devices/${deviceId}/claim`, { token }),
+    generateClaimToken: (deviceId: string) =>
+      apiClient.post<ClaimTokenResponse, ClaimTokenResponse>(`/devices/${deviceId}/claim-token`),
   },
   sensors: {
     getData: (deviceId: string, params?: RequestParams) =>
@@ -333,6 +513,7 @@ export const grainApi = {
   sessions: {
     list: (params?: RequestParams) => apiClient.get<SessionSummary[] | PaginatedResponse<SessionSummary>, SessionSummary[] | PaginatedResponse<SessionSummary>>("/sessions", { params }),
     getById: (id: string) => apiClient.get<SessionSummary, SessionSummary>(`/sessions/${id}`),
+    getReport: (id: string) => apiClient.get<SessionReportData, SessionReportData>(`/sessions/${id}/report`),
     start: (payload: { deviceId: string; grainType?: string; targetMoisture?: number }) =>
       apiClient.post("/sessions", payload),
     end: (id: string, action: "complete" | "abort") => apiClient.patch(`/sessions/${id}`, { action }),
@@ -363,10 +544,14 @@ export const grainApi = {
     getOverview: (period: "daily" | "weekly" | "monthly", deviceId?: string) =>
       apiClient.get<AnalyticsOverview, AnalyticsOverview>("/analytics/overview", { params: { period, deviceId } }),
   },
+  weather: {
+    get: (lat: number, lon: number) =>
+      apiClient.get<WeatherData, WeatherData>("/weather", { params: { lat, lon } }),
+  },
   ai: {
     predict: (payload: Record<string, unknown>) => apiClient.post<PredictionResponse, PredictionResponse>("/ai/predict", payload),
-    chat: (messages: ChatMessage[], deviceId?: string, autonomousMode = false) =>
-      apiClient.post<ChatResponse, ChatResponse>("/assistant/chat", { messages, deviceId, autonomousMode }),
+    chat: (messages: ChatMessage[], deviceId?: string, autonomousMode = false, weatherData?: AssistantWeatherData) =>
+      apiClient.post<ChatResponse, ChatResponse>("/assistant/chat", { messages, deviceId, autonomousMode, weatherData }),
     actionLogs: (deviceId: string, params?: { page?: number; limit?: number }) =>
       apiClient.get<PaginatedResponse<AgentActionLogSummary>, PaginatedResponse<AgentActionLogSummary>>("/assistant/logs", {
         params: { deviceId, ...params },

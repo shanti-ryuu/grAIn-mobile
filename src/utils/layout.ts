@@ -1,7 +1,7 @@
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-export const TAB_BAR_HEIGHT = 74;
-export const TAB_BAR_BOTTOM_GAP = 0;
+export const TAB_BAR_HEIGHT = 64;
+export const TAB_BAR_BOTTOM_GAP = 20;
 export const TAB_BAR_SIDE_INSET = 10;
 export const FLOATING_ACTION_GAP = 18;
 

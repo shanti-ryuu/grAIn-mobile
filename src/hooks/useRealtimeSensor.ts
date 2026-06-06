@@ -140,7 +140,6 @@ export function useRealtimeSensor(deviceId?: string | null): UseRealtimeSensorRe
   const isOnline = deriveOnlineStatus(firebaseStatus, lastActiveMs, nowMs);
 
   useEffect(() => {
-    console.log("[useRealtimeSensor] deviceId:", deviceId);
     if (!deviceId || !db) {
       setSensorData(DEFAULT_SENSOR_DATA);
       setRuntimeState(DEFAULT_RUNTIME_STATE);
@@ -156,7 +155,6 @@ export function useRealtimeSensor(deviceId?: string | null): UseRealtimeSensorRe
     const lastActiveRef = ref(db, `grain/devices/${deviceId}/lastActive`);
 
     const unsubscribeSensor = onValue(sensorRef, (snapshot) => {
-      console.log("[useRealtimeSensor] sensors snapshot:", snapshot.val());
       const value = normalizeSensorData(snapshot.val());
       setSensorData(value);
       if (value?.updatedAt) {

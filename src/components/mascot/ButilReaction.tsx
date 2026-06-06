@@ -6,6 +6,7 @@ import { ButilTip } from "@/components/mascot/ButilTip";
 import { useTutorial } from "@/context/TutorialContext";
 import { useDevices } from "@/hooks/useDevices";
 import { useRealtimeSensor } from "@/hooks/useRealtimeSensor";
+import { emitButilReactionVisibility } from "@/utils/butil-events";
 
 type Reaction = {
   key: string;
@@ -62,6 +63,14 @@ export function ButilReaction() {
 
     void evaluate();
   }, [sensorData]);
+
+  useEffect(() => {
+    const visible = Boolean(reaction && !currentTutorialScreen);
+    emitButilReactionVisibility(visible);
+    return () => {
+      emitButilReactionVisibility(false);
+    };
+  }, [currentTutorialScreen, reaction]);
 
   if (!reaction || currentTutorialScreen) {
     return null;

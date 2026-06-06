@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
+import * as ReactNative from "react-native";
 import {
   ActivityIndicator,
   Dimensions,
@@ -9,16 +10,20 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AssistantToolCall, ChatMessage, DeviceSummary, grainApi } from "@/api/grain-api-client";
+import { AnimatePressable } from "@/components/AnimatePressable";
 import { useAssistant } from "@/context/AssistantContext";
 import { useTheme } from "@/context/ThemeContext";
+import { useWeather } from "@/hooks/useWeather";
 import { COLORS, SPACING } from "@/utils/constants";
 import { getListData } from "@/utils/data";
 
@@ -34,6 +39,12 @@ const quickPrompts = [
   "How long until target moisture?",
   "Check recent alerts",
 ];
+const Keyboard = (ReactNative as unknown as {
+  Keyboard: {
+    addListener: (event: string, callback: () => void) => { remove: () => void };
+    dismiss: () => void;
+  };
+}).Keyboard;
 
 function fallbackReply(message: string): string {
   const text = message.toLowerCase();
@@ -131,15 +142,30 @@ function TypingDots({ status }: { status: string }) {
 
 export function AssistantModal() {
   const { isOpen, closeAssistant } = useAssistant();
-  const { theme } = useTheme();
+  const { isDark, theme } = useTheme();
   const [messages, setMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState("");
   const [lastInput, setLastInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [autonomousMode, setAutonomousMode] = useState(false);
   const [activeDeviceId, setActiveDeviceId] = useState<string | undefined>();
+  const weatherQuery = useWeather(true);
+  const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<LocalMessage>>(null);
-  const modalHeight = Dimensions.get("window").height * 0.85;
+  const screenHeight = Dimensions.get("window").height;
+  const modalHeight = keyboardVisible
+    ? Math.min(screenHeight * 0.54, screenHeight - insets.top - insets.bottom - 24)
+    : Math.min(screenHeight * 0.78, screenHeight - insets.top - 32);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (!isOpen) {
@@ -169,6 +195,11 @@ export function AssistantModal() {
     router.push({ pathname: "/agent-logs", params: activeDeviceId ? { deviceId: activeDeviceId } : {} } as never);
   };
 
+  const sendQuickPrompt = (prompt: string) => {
+    Keyboard.dismiss();
+    void sendMessage(prompt);
+  };
+
   const sendMessage = async (content: string) => {
     const trimmed = content.trim().slice(0, 500);
     if (!trimmed || isLoading) {
@@ -187,7 +218,17 @@ export function AssistantModal() {
         role,
         content: messageContent,
       }));
-      const response = await grainApi.ai.chat(contextMessages, activeDeviceId, autonomousMode);
+      const weatherData = weatherQuery.weather
+        ? {
+            temperature: weatherQuery.weather.current.temperature,
+            humidity: weatherQuery.weather.current.humidity,
+            description: weatherQuery.weather.current.description,
+            suitable: weatherQuery.weather.dryingAdvice.suitable,
+            recommendation: weatherQuery.weather.dryingAdvice.recommendation,
+            cityName: weatherQuery.weather.current.cityName,
+          }
+        : undefined;
+      const response = await grainApi.ai.chat(contextMessages, activeDeviceId, autonomousMode, weatherData);
       setMessages((current) => [
         ...current,
         {
@@ -210,15 +251,16 @@ export function AssistantModal() {
 
   return (
     <Modal animationType="slide" transparent visible={isOpen} onRequestClose={closeAssistant}>
-      <View style={styles.backdrop}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={[styles.sheet, { backgroundColor: theme.bgBase, height: modalHeight }]}
-        >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
+        style={styles.backdrop}
+      >
+        <View style={[styles.sheet, { backgroundColor: theme.bgBase, height: modalHeight, marginTop: insets.top + 16 }]}>
           <View style={[styles.header, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
             <View style={styles.headerTitleWrap}>
               <Text style={[styles.title, { color: theme.textPrimary }]}>grAIn Assistant</Text>
-              <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
+              <Text style={[styles.subtitle, { color: theme.textPrimary }]}>
                 {activeDeviceId ? `Device: ${activeDeviceId}` : "System assistant"}
               </Text>
             </View>
@@ -253,46 +295,64 @@ export function AssistantModal() {
           ) : null}
 
           {messages.length === 0 ? (
-            <View style={styles.quickWrap}>
+            <ScrollView
+              contentContainerStyle={styles.quickWrapContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              style={styles.quickWrap}
+            >
               {quickPrompts.map((prompt) => (
-                <Pressable key={prompt} onPress={() => void sendMessage(prompt)} style={[styles.quickPrompt, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
-                  <Text style={[styles.quickText, { color: theme.textPrimary }]}>{prompt}</Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
-
-          <FlatList
-            contentContainerStyle={styles.messageList}
-            data={messages}
-            keyExtractor={(item: LocalMessage, index: number) => `${item.timestamp}-${index}`}
-            ref={listRef}
-            renderItem={({ item }: { item: LocalMessage }) => (
-              <View style={[styles.bubbleWrap, item.role === "user" ? styles.userBubbleWrap : styles.assistantBubbleWrap]}>
-                <View
+                <AnimatePressable
+                  key={prompt}
+                  onPress={() => sendQuickPrompt(prompt)}
                   style={[
-                    styles.bubble,
-                    item.role === "user"
-                      ? styles.userBubble
-                      : { backgroundColor: theme.bgCard, borderColor: theme.border, borderWidth: 1 },
+                    styles.quickPrompt,
+                    {
+                      backgroundColor: isDark ? "#1C1C1E" : "#FFFFFF",
+                      borderColor: isDark ? "#2C2C2E" : "rgba(255,255,255,0.90)",
+                    },
                   ]}
                 >
-                  <Text style={[styles.messageText, { color: item.role === "user" ? "#FFFFFF" : theme.textPrimary }]}>
-                    {item.role === "assistant" ? cleanAssistantText(item.content) : item.content}
-                  </Text>
+                  <Text style={[styles.quickText, { color: theme.textPrimary }]}>{prompt}</Text>
+                  <Ionicons name="chevron-forward" size={22} color={theme.textSecondary} />
+                </AnimatePressable>
+              ))}
+            </ScrollView>
+          ) : (
+            <FlatList
+              contentContainerStyle={styles.messageList}
+              data={messages}
+              keyExtractor={(item: LocalMessage, index: number) => `${item.timestamp}-${index}`}
+              keyboardShouldPersistTaps="handled"
+              ref={listRef}
+              style={styles.messageListWrap}
+              renderItem={({ item }: { item: LocalMessage }) => (
+                <View style={[styles.bubbleWrap, item.role === "user" ? styles.userBubbleWrap : styles.assistantBubbleWrap]}>
+                  <View
+                    style={[
+                      styles.bubble,
+                      item.role === "user"
+                        ? styles.userBubble
+                        : { backgroundColor: theme.bgCard, borderColor: theme.border, borderWidth: 1 },
+                    ]}
+                  >
+                    <Text style={[styles.messageText, { color: item.role === "user" ? "#FFFFFF" : theme.textPrimary }]}>
+                      {item.role === "assistant" ? cleanAssistantText(item.content) : item.content}
+                    </Text>
+                  </View>
+                  {item.actions?.map((action, index) => (
+                    <ActionCard action={action} key={`${action.commandStr ?? action.status}-${index}`} />
+                  ))}
+                  {toolStatus(item.toolCalls) ? <Text style={styles.toolStatusText}>{toolStatus(item.toolCalls)}</Text> : null}
+                  <Text style={[styles.timestamp, { color: theme.textSecondary }]}>{messageTime(item.timestamp)}</Text>
                 </View>
-                {item.actions?.map((action, index) => (
-                  <ActionCard action={action} key={`${action.commandStr ?? action.status}-${index}`} />
-                ))}
-                {toolStatus(item.toolCalls) ? <Text style={styles.toolStatusText}>{toolStatus(item.toolCalls)}</Text> : null}
-                <Text style={[styles.timestamp, { color: theme.textSecondary }]}>{messageTime(item.timestamp)}</Text>
-              </View>
-            )}
-          />
+              )}
+            />
+          )}
 
           {isLoading ? <TypingDots status={loadingStatus(lastInput)} /> : null}
 
-          <View style={[styles.inputRow, { backgroundColor: theme.bgBase }]}>
+          <View style={[styles.inputRow, { backgroundColor: theme.bgBase, paddingBottom: Math.max(insets.bottom, SPACING.md) }]}>
             <TextInput
               maxLength={500}
               multiline
@@ -301,7 +361,11 @@ export function AssistantModal() {
               placeholderTextColor={theme.textSecondary}
               style={[
                 styles.input,
-                { backgroundColor: theme.bgCard, borderColor: theme.border, color: theme.textPrimary },
+                {
+                  backgroundColor: isDark ? "#111912" : theme.bgCard,
+                  borderColor: isDark ? "#314234" : theme.border,
+                  color: theme.textPrimary,
+                },
               ]}
               value={input}
             />
@@ -309,8 +373,8 @@ export function AssistantModal() {
               <Ionicons name="send" size={20} color="#FFFFFF" />
             </Pressable>
           </View>
-        </KeyboardAvoidingView>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -345,11 +409,13 @@ const styles = StyleSheet.create({
   autoLabel: {
     fontSize: 13,
     fontWeight: "900",
+    lineHeight: 18,
   },
   autoLabelWrap: {
     alignItems: "center",
     flexDirection: "row",
     gap: SPACING.xs,
+    minHeight: 32,
   },
   autoRow: {
     alignItems: "center",
@@ -381,9 +447,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
-    padding: SPACING.md,
+    paddingBottom: 14,
+    paddingHorizontal: SPACING.md,
+    paddingTop: 18,
   },
   headerActions: {
+    alignItems: "center",
     flexDirection: "row",
     gap: SPACING.xs,
   },
@@ -398,57 +467,86 @@ const styles = StyleSheet.create({
     width: 40,
   },
   input: {
-    borderRadius: 18,
+    borderRadius: 20,
     borderWidth: 1,
     flex: 1,
     maxHeight: 110,
-    minHeight: 48,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 12,
+    minHeight: 56,
+    paddingLeft: 16,
+    paddingRight: 12,
+    paddingVertical: 14,
   },
   inputRow: {
-    alignItems: "flex-end",
+    alignItems: "center",
     flexDirection: "row",
-    gap: SPACING.sm,
-    padding: SPACING.md,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
   },
   messageList: {
+    flexGrow: 1,
     padding: SPACING.md,
     paddingBottom: SPACING.lg,
+  },
+  messageListWrap: {
+    flex: 1,
   },
   messageText: {
     fontSize: 15,
     lineHeight: 21,
   },
   quickPrompt: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: SPACING.md,
+    alignItems: "center",
+    borderRadius: 14,
+    borderWidth: 0.5,
+    flexDirection: "row",
+    gap: SPACING.sm,
+    justifyContent: "space-between",
+    minHeight: 76,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
   },
   quickText: {
-    fontSize: 14,
+    flex: 1,
+    fontSize: 15,
     fontWeight: "800",
+    lineHeight: 20,
   },
   quickWrap: {
-    gap: SPACING.sm,
-    padding: SPACING.md,
+    flex: 1,
+  },
+  quickWrapContent: {
+    gap: SPACING.md,
+    paddingBottom: SPACING.lg,
+    paddingHorizontal: SPACING.md,
+    paddingTop: 22,
   },
   sendButton: {
     alignItems: "center",
     backgroundColor: COLORS.primary,
-    borderRadius: 18,
-    height: 48,
+    borderRadius: 20,
+    height: 56,
     justifyContent: "center",
-    width: 48,
+    marginLeft: 10,
+    width: 56,
   },
   sheet: {
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    elevation: 60,
     overflow: "hidden",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: -12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
   },
   subtitle: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 18,
   },
   timestamp: {
     fontSize: 11,

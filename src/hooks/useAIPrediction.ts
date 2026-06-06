@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-import { grainApi, PredictionResponse, SensorReading } from "@/api/grain-api-client";
+import { WeatherContext, grainApi, PredictionResponse, SensorReading } from "@/api/grain-api-client";
 
 export interface PredictionPayload {
   deviceId: string;
@@ -11,6 +11,7 @@ export interface PredictionPayload {
   timeElapsed: number;
   solarVoltage?: number;
   energyConsumed?: number;
+  weatherContext?: WeatherContext;
 }
 
 interface UseAIPredictionResult {
@@ -68,6 +69,13 @@ function localFallback(payload: PredictionPayload): PredictionResponse {
     projectedCurve: buildCurve(payload.moisture, rate),
     targetMoisture: TARGET_MOISTURE,
     algorithm: "local-fallback",
+    weatherEnhanced: Boolean(payload.weatherContext),
+    weatherContext: payload.weatherContext ?? null,
+    dryingConditionNote: payload.weatherContext
+      ? payload.weatherContext.outdoorHumidity > payload.humidity + 15
+        ? `Outdoor humidity is ${payload.weatherContext.outdoorHumidity.toFixed(0)}%, so drying may be slower than predicted.`
+        : "Weather conditions were included in this fallback prediction."
+      : "Weather context was not included in this prediction.",
   };
 }
 

@@ -42,17 +42,16 @@ function gradientForLabel(label: string, isDark: boolean): readonly [string, str
   return isDark ? ["#2D0A1E", "#9D174D"] : ["#FCE7F3", "#EC4899"];
 }
 
-function numericValue(value: string | number): number {
-  return typeof value === "number" ? value : Number(value.replace(/[^\d.-]/g, ""));
+function displayUnit(unit: string): string {
+  if (unit.toLowerCase() === "c") {
+    return "°C";
+  }
+  return unit;
 }
 
 export function SensorCard({ icon, label, value, unit, color, secondaryLabel }: SensorCardProps) {
   const { theme, isDark } = useTheme();
   const scale = useSharedValue(1);
-  const parsed = numericValue(value);
-  const progress = Number.isFinite(parsed)
-    ? Math.max(0, Math.min(100, label.toLowerCase().includes("temp") ? (parsed / 75) * 100 : parsed))
-    : 0;
 
   useEffect(() => {
     scale.value = withSequence(withTiming(1.1, { duration: 150 }), withTiming(1, { duration: 150 }));
@@ -64,28 +63,22 @@ export function SensorCard({ icon, label, value, unit, color, secondaryLabel }: 
 
   const gradient = gradientForLabel(label, isDark);
   const iconColor = color ?? "#FFFFFF";
+  const formattedUnit = displayUnit(unit);
 
   return (
     <Card style={styles.card}>
-      <LinearGradient colors={gradient} style={styles.iconWrap}>
-        <Ionicons name={icon} size={22} color={iconColor} />
-      </LinearGradient>
-      <Text style={[styles.label, { color: theme.textSecondary }]}>{label}</Text>
-      <View style={styles.valueRow}>
-        <Animated.Text style={[styles.value, { color: theme.textPrimary }, valueStyle]}>{value}</Animated.Text>
-        <Text style={[styles.unit, { color: theme.textTertiary }]}>{unit}</Text>
-      </View>
-      {secondaryLabel ? <Text style={[styles.secondaryLabel, { color: theme.textSecondary }]}>{secondaryLabel}</Text> : null}
-      <View style={[styles.thresholdTrack, { backgroundColor: theme.bgElevated }]}>
-        <View
-          style={[
-            styles.thresholdFill,
-            {
-              width: `${progress}%`,
-              backgroundColor: progress > 75 ? theme.statusDanger : progress > 55 ? theme.statusWarning : theme.statusOnline,
-            },
-          ]}
-        />
+      <View style={styles.content}>
+        <LinearGradient colors={gradient} style={styles.iconWrap}>
+          <Ionicons name={icon} size={22} color={iconColor} />
+        </LinearGradient>
+        <Text style={[styles.label, { color: theme.textSecondary }]}>{label}</Text>
+        <View style={styles.valueRow}>
+          <Animated.Text style={[styles.value, { color: theme.textPrimary }, valueStyle]} numberOfLines={1}>
+            {value}
+          </Animated.Text>
+          {formattedUnit ? <Text style={[styles.unit, { color: theme.textTertiary }]}>{formattedUnit}</Text> : null}
+        </View>
+        {secondaryLabel ? <Text style={[styles.secondaryLabel, { color: theme.textSecondary }]} numberOfLines={1}>{secondaryLabel}</Text> : null}
       </View>
     </Card>
   );
@@ -93,18 +86,26 @@ export function SensorCard({ icon, label, value, unit, color, secondaryLabel }: 
 
 const styles = StyleSheet.create({
   card: {
+    flex: 1,
+    gap: SPACING.sm,
+    justifyContent: "space-between",
+    minHeight: 186,
+  },
+  content: {
+    alignItems: "center",
     gap: SPACING.sm,
   },
   iconWrap: {
     alignItems: "center",
-    borderRadius: 12,
-    height: 40,
+    borderRadius: 16,
+    height: 44,
     justifyContent: "center",
-    width: 40,
+    width: 44,
   },
   label: {
-    fontSize: 13,
-    fontWeight: "600",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: -0.1,
   },
   secondaryLabel: {
     fontSize: 12,
@@ -115,22 +116,18 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     flexDirection: "row",
     gap: 4,
+    justifyContent: "center",
+    minWidth: "100%",
   },
   value: {
-    fontSize: 24,
-    fontWeight: "800",
-  },
-  thresholdFill: {
-    borderRadius: 999,
-    height: "100%",
-  },
-  thresholdTrack: {
-    borderRadius: 999,
-    height: 4,
-    overflow: "hidden",
+    fontSize: 30,
+    fontWeight: "900",
+    letterSpacing: -0.8,
+    textAlign: "center",
   },
   unit: {
-    fontSize: 13,
-    marginBottom: 3,
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 5,
   },
 });

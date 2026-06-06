@@ -18,9 +18,10 @@ interface ButilProps {
   size?: number;
   speaking?: boolean;
   onPress?: () => void;
+  showSpeechPulse?: boolean;
 }
 
-export function Butil({ mood, size = 120, speaking = false, onPress }: ButilProps) {
+export function Butil({ mood, size = 120, speaking = false, onPress, showSpeechPulse = true }: ButilProps) {
   const translateY = useSharedValue(0);
   const rotate = useSharedValue(0);
   const armRotate = useSharedValue(0);
@@ -80,7 +81,7 @@ export function Butil({ mood, size = 120, speaking = false, onPress }: ButilProp
 
   return (
     <Pressable disabled={!onPress} onPress={onPress} style={[styles.wrap, { width: size, height: size * 1.3 }]}>
-      <Animated.View style={[styles.speechPulse, bubbleStyle]} />
+      {showSpeechPulse ? <Animated.View style={[styles.speechPulse, bubbleStyle]} /> : null}
       <Animated.View style={[styles.body, bodyStyle]}>
         <Animated.View style={[styles.leftArm, leftArmStyle]}>
           <Svg width={size} height={size * 1.3} viewBox="0 0 100 130">

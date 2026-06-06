@@ -21,6 +21,7 @@ export default function AppLayout() {
   const { theme } = useTheme();
   const { tutorialsDone, startTutorial } = useTutorial();
   const pathname = usePathname();
+  const isWeatherDetail = pathname.includes("/weather-detail");
 
   useEffect(() => {
     const screen = pathname.includes("/control")
@@ -53,35 +54,66 @@ export default function AppLayout() {
 
   return (
     <AssistantProvider>
-      <SafeAreaView edges={["top"]} style={[styles.container, { backgroundColor: theme.bgBase }]}>
-        <ServerStatusBanner />
-        <Tabs screenOptions={tabScreenOptions()} tabBar={(props) => <AnimatedTabBar {...props} />}>
-          {tabs.map((tab) => (
-            <Tabs.Screen
-              key={tab.name}
-              name={tab.name}
-              options={{
-                title: tab.label,
-              }}
-            />
-          ))}
-          <Tabs.Screen name="device/[id]" options={{ href: null }} />
-          <Tabs.Screen name="ai-prediction" options={{ href: null }} />
-          <Tabs.Screen name="agent-logs" options={{ href: null }} />
-          <Tabs.Screen name="profile" options={{ href: null }} />
-          <Tabs.Screen name="add-device" options={{ href: null }} />
-        </Tabs>
+      <View style={[styles.root, { backgroundColor: theme.bgBase }]}>
+        {isWeatherDetail ? (
+          <View style={styles.content}>
+            <ServerStatusBanner />
+            <Tabs screenOptions={tabScreenOptions()} tabBar={(props) => <AnimatedTabBar {...props} />}>
+              {tabs.map((tab) => (
+                <Tabs.Screen
+                  key={tab.name}
+                  name={tab.name}
+                  options={{
+                    title: tab.label,
+                  }}
+                />
+              ))}
+              <Tabs.Screen name="device/[id]" options={{ href: null }} />
+              <Tabs.Screen name="ai-prediction" options={{ href: null }} />
+              <Tabs.Screen name="agent-logs" options={{ href: null }} />
+              <Tabs.Screen name="claim-device" options={{ href: null }} />
+              <Tabs.Screen name="profile" options={{ href: null }} />
+              <Tabs.Screen name="add-device" options={{ href: null }} />
+              <Tabs.Screen name="weather-detail" options={{ href: null }} />
+            </Tabs>
+          </View>
+        ) : (
+          <SafeAreaView edges={["top"]} style={styles.content}>
+          <ServerStatusBanner />
+          <Tabs screenOptions={tabScreenOptions()} tabBar={(props) => <AnimatedTabBar {...props} />}>
+            {tabs.map((tab) => (
+              <Tabs.Screen
+                key={tab.name}
+                name={tab.name}
+                options={{
+                  title: tab.label,
+                }}
+              />
+            ))}
+            <Tabs.Screen name="device/[id]" options={{ href: null }} />
+            <Tabs.Screen name="ai-prediction" options={{ href: null }} />
+            <Tabs.Screen name="agent-logs" options={{ href: null }} />
+            <Tabs.Screen name="claim-device" options={{ href: null }} />
+            <Tabs.Screen name="profile" options={{ href: null }} />
+            <Tabs.Screen name="add-device" options={{ href: null }} />
+            <Tabs.Screen name="weather-detail" options={{ href: null }} />
+          </Tabs>
+          </SafeAreaView>
+        )}
         <AssistantFAB />
         <AssistantModal />
         <ButilReaction />
         <InteractiveTutorial />
-      </SafeAreaView>
+      </View>
     </AssistantProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  content: {
+    flex: 1,
+  },
+  root: {
     flex: 1,
   },
   loading: {

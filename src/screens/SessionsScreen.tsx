@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 
-import { DeviceSummary, SessionSummary } from "@/api/grain-api-client";
+import { DeviceSummary, SessionSummary, grainApi } from "@/api/grain-api-client";
 import { Card } from "@/components/Card";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -19,9 +19,11 @@ import { useTheme } from "@/context/ThemeContext";
 import { useDevices } from "@/hooks/useDevices";
 import { useDryingSessions } from "@/hooks/useDryingSessions";
 import { useOfflineGuard } from "@/hooks/useOfflineGuard";
+import { useWeather } from "@/hooks/useWeather";
 import { COLORS, SPACING } from "@/utils/constants";
 import { clampPercent, relativeTime, sessionProgress } from "@/utils/data";
 import { useBottomTabPadding } from "@/utils/layout";
+import { generateSessionReport, shareReport } from "@/utils/pdf-generator";
 
 const grainTypes = ["rice", "corn", "wheat", "soybean", "coffee"] as const;
 
@@ -65,17 +67,34 @@ function ProgressBar({ progress }: { progress: number }) {
   );
 }
 
-function SessionItem({ session }: { session: SessionSummary }) {
-  const { theme } = useTheme();
+function SessionItem({
+  session,
+  exporting,
+  onExport,
+}: {
+  session: SessionSummary;
+  exporting: boolean;
+  onExport: () => void;
+}) {
+  const { isDark, theme } = useTheme();
   const finalOrCurrent = session.finalMoisture ?? session.currentMoisture;
   return (
-    <Card style={styles.sessionItem}>
+    <Card style={[styles.sessionItem, isDark && styles.darkCard]}>
       <View style={styles.rowBetween}>
         <View>
           <Text style={[styles.sessionDevice, { color: theme.textPrimary }]}>{session.deviceId}</Text>
           <Text style={[styles.sessionMeta, { color: theme.textSecondary }]}>{titleCase(session.grainType)}</Text>
         </View>
-        <StatusBadge status={session.status} size="sm" />
+        <View style={styles.sessionActions}>
+          {exporting ? (
+            <ActivityIndicator color={COLORS.primary} />
+          ) : (
+            <Pressable onPress={onExport} style={[styles.exportIcon, { borderColor: theme.border }]}>
+              <Ionicons name="document-text-outline" size={16} color={theme.accentPrimary} />
+            </Pressable>
+          )}
+          <StatusBadge status={session.status} size="sm" />
+        </View>
       </View>
       <View style={styles.sessionLine}>
         <Text style={[styles.sessionText, { color: theme.textPrimary }]}>
@@ -127,9 +146,13 @@ export function SessionsScreen() {
   const [grainType, setGrainType] = useState<(typeof grainTypes)[number]>("rice");
   const [targetMoisture, setTargetMoisture] = useState(14);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [exportingSessionId, setExportingSessionId] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
-  const { theme } = useTheme();
+  const { isDark, theme } = useTheme();
   const bottomPadding = useBottomTabPadding(40);
+  const darkModalSurface = isDark ? "#1C1C1E" : theme.bgCard;
+  const darkBorder = isDark ? "#2C2C2E" : theme.border;
+  const weatherQuery = useWeather(true);
 
   const onlineDevices = useMemo(() => devices.filter((device) => device.status === "online"), [devices]);
   const historySessions = useMemo(() => sessions.filter((session) => session.status !== "active"), [sessions]);
@@ -201,6 +224,19 @@ export function SessionsScreen() {
     }
   };
 
+  const exportSession = async (session: SessionSummary) => {
+    setExportingSessionId(session._id);
+    try {
+      const reportData = await grainApi.sessions.getReport(session._id);
+      const report = await generateSessionReport(reportData);
+      await shareReport(report.uri, report.filename);
+    } catch {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setExportingSessionId(null);
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.bgBase }]}>
       <View style={[styles.header, { backgroundColor: theme.bgBase }]}>
@@ -223,7 +259,7 @@ export function SessionsScreen() {
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
             {activeSession ? (
-              <Card style={styles.activeCard}>
+              <Card style={[styles.activeCard, isDark && styles.darkCard]}>
                 <View style={styles.rowBetween}>
                   <View>
                     <Text style={[styles.activeTitle, { color: theme.textPrimary }]}>{activeSession.deviceId}</Text>
@@ -233,20 +269,23 @@ export function SessionsScreen() {
                 </View>
                 <ProgressBar progress={activeProgress} />
                 <View style={styles.rowBetween}>
-                  <Text style={styles.activeMetric}>
+                  <Text style={[styles.activeMetric, { color: theme.textPrimary }]}>
                     {formatMoisture(activeSession.currentMoisture)} to {formatMoisture(activeSession.targetMoisture)}
                   </Text>
-                  <Text style={styles.activeMetric}>{activeProgress.toFixed(0)}%</Text>
+                  <Text style={[styles.activeMetric, { color: theme.textPrimary }]}>{activeProgress.toFixed(0)}%</Text>
                 </View>
                 <View style={styles.rowBetween}>
                     <Text style={[styles.sessionMeta, { color: theme.textSecondary }]}>
                     Elapsed: {formatDuration(activeSession.duration, activeSession.startedAt, now)}
                   </Text>
-                  <Text style={styles.sessionMeta}>
+                  <Text style={[styles.sessionMeta, { color: theme.textSecondary }]}>
                     Energy: {(activeSession.totalEnergyUsed ?? 0).toFixed(2)} kWh
                   </Text>
                 </View>
                 <View style={styles.actionRow}>
+                  <Pressable onPress={() => void exportSession(activeSession)} style={[styles.outlineButton, styles.exportOutline]}>
+                    <Text style={[styles.outlineText, { color: COLORS.primary }]}>Export PDF</Text>
+                  </Pressable>
                   <Pressable onPress={completeActive} style={[styles.outlineButton, styles.completeOutline, !canInteract && styles.disabledButton]}>
                     <Text style={[styles.outlineText, { color: COLORS.success }]}>Complete</Text>
                   </Pressable>
@@ -256,7 +295,7 @@ export function SessionsScreen() {
                 </View>
               </Card>
             ) : (
-              <Card style={styles.activeCard}>
+              <Card style={[styles.activeCard, isDark && styles.darkCard]}>
                 <Text style={[styles.activeTitle, { color: theme.textPrimary }]}>No active session</Text>
                 <Text style={[styles.activeSubtitle, { color: theme.textSecondary }]}>Start a session when an online dryer is ready.</Text>
               </Card>
@@ -281,12 +320,18 @@ export function SessionsScreen() {
         }
         onRefresh={() => void refetch()}
         refreshing={isLoading}
-        renderItem={({ item }: { item: SessionSummary }) => <SessionItem session={item} />}
+        renderItem={({ item }: { item: SessionSummary }) => (
+          <SessionItem
+            session={item}
+            exporting={exportingSessionId === item._id}
+            onExport={() => void exportSession(item)}
+          />
+        )}
       />
 
       <Modal animationType="slide" transparent visible={modalOpen} onRequestClose={() => setModalOpen(false)}>
         <View style={styles.modalBackdrop}>
-          <View style={[styles.modalSheet, { backgroundColor: theme.bgCard }]}>
+          <View style={[styles.modalSheet, { backgroundColor: darkModalSurface, borderColor: darkBorder }]}>
             <View style={styles.rowBetween}>
               <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Start Session</Text>
               <Pressable onPress={() => setModalOpen(false)}>
@@ -317,7 +362,7 @@ export function SessionsScreen() {
                   onPress={() => setGrainType(type)}
                   style={[
                     styles.modalChip,
-                    { backgroundColor: theme.bgCard, borderColor: theme.border },
+                    { backgroundColor: darkModalSurface, borderColor: darkBorder },
                     grainType === type && { backgroundColor: theme.accentPrimary, borderColor: theme.accentPrimary },
                   ]}
                 >
@@ -332,18 +377,37 @@ export function SessionsScreen() {
             <View style={styles.stepperRow}>
               <Pressable
                 onPress={() => setTargetMoisture((value) => Math.max(10, value - 1))}
-                style={styles.stepperControl}
+                style={[styles.stepperControl, { backgroundColor: isDark ? "#132417" : "#F0FDF4" }]}
               >
                 <Ionicons name="remove" size={22} color={COLORS.primary} />
               </Pressable>
-              <Text style={styles.stepperValue}>{targetMoisture}%</Text>
+              <Text style={[styles.stepperValue, { color: theme.textPrimary }]}>{targetMoisture}%</Text>
               <Pressable
                 onPress={() => setTargetMoisture((value) => Math.min(20, value + 1))}
-                style={styles.stepperControl}
+                style={[styles.stepperControl, { backgroundColor: isDark ? "#132417" : "#F0FDF4" }]}
               >
                 <Ionicons name="add" size={22} color={COLORS.primary} />
               </Pressable>
             </View>
+
+            {weatherQuery.weather ? (
+              <View style={[styles.weatherCard, { backgroundColor: isDark ? "#132417" : "#F8FAF6", borderColor: isDark ? "#24452B" : "#DDE8D9" }]}>
+                <View style={styles.rowBetween}>
+                  <Text style={[styles.modalLabel, { color: theme.textPrimary }]}>Weather Advisory</Text>
+                  <Ionicons
+                    name={weatherQuery.weather.dryingAdvice.suitable ? "leaf-outline" : "warning-outline"}
+                    size={19}
+                    color={weatherQuery.weather.dryingAdvice.suitable ? COLORS.success : COLORS.warning}
+                  />
+                </View>
+                <Text style={[styles.sessionMeta, { color: theme.textSecondary }]}>
+                  Outdoor humidity: {weatherQuery.weather.current.humidity.toFixed(0)}% · {weatherQuery.weather.current.temperature.toFixed(0)} C
+                </Text>
+                <Text style={[styles.sessionMeta, { color: theme.textSecondary }]}>
+                  {weatherQuery.weather.dryingAdvice.recommendation}
+                </Text>
+              </View>
+            ) : null}
 
             <Pressable
               disabled={isSubmitting}
@@ -411,6 +475,10 @@ const styles = StyleSheet.create({
     paddingTop: 0,
     paddingBottom: 120,
   },
+  darkCard: {
+    backgroundColor: "#1C1C1E",
+    borderColor: "#2C2C2E",
+  },
   disabledButton: {
     opacity: 0.45,
   },
@@ -423,6 +491,17 @@ const styles = StyleSheet.create({
     color: COLORS.danger,
     fontSize: 13,
     fontWeight: "800",
+  },
+  exportIcon: {
+    alignItems: "center",
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 32,
+    justifyContent: "center",
+    width: 32,
+  },
+  exportOutline: {
+    borderColor: COLORS.primary,
   },
   efficiencyText: {
     fontSize: 14,
@@ -483,6 +562,7 @@ const styles = StyleSheet.create({
   },
   modalSheet: {
     backgroundColor: COLORS.card,
+    borderTopWidth: 0.5,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     gap: SPACING.md,
@@ -556,6 +636,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
+  sessionActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: SPACING.sm,
+  },
   sessionMeta: {
     color: COLORS.textSecondary,
     fontSize: 12,
@@ -613,5 +698,13 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontSize: 28,
     fontWeight: "900",
+  },
+  weatherCard: {
+    backgroundColor: "#F8FAF6",
+    borderColor: "#DDE8D9",
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: SPACING.xs,
+    padding: SPACING.md,
   },
 });

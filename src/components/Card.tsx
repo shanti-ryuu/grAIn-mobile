@@ -17,7 +17,7 @@ export function Card({
 }) {
   const { theme, isDark } = useTheme();
   const scale = useSharedValue(1);
-  const shadowOpacity = useSharedValue(isDark ? 0.4 : 0.08);
+  const shadowOpacity = useSharedValue(isDark ? 0.4 : 0.12);
 
   const animatedStyle = useAnimatedStyle(() => ({
     elevation: shadowOpacity.value * 10,
@@ -29,11 +29,7 @@ export function Card({
     <Animated.View
       style={[
         styles.card,
-        {
-          backgroundColor: theme.bgCard,
-          borderColor: theme.border,
-          shadowColor: theme.shadow,
-        },
+        { backgroundColor: theme.bgCard, borderColor: theme.border, shadowColor: theme.shadow },
         animatedStyle,
         style,
       ]}
@@ -54,11 +50,11 @@ export function Card({
       }}
       onPressIn={() => {
         scale.value = withSpring(0.97, { damping: 15, stiffness: 400 });
-        shadowOpacity.value = withSpring(isDark ? 0.52 : 0.14, { damping: 15, stiffness: 300 });
+        shadowOpacity.value = withSpring(isDark ? 0.52 : 0.18, { damping: 15, stiffness: 300 });
       }}
       onPressOut={() => {
         scale.value = withSpring(1, { damping: 15, stiffness: 400 });
-        shadowOpacity.value = withSpring(isDark ? 0.4 : 0.08, { damping: 15, stiffness: 300 });
+        shadowOpacity.value = withSpring(isDark ? 0.4 : 0.12, { damping: 15, stiffness: 300 });
       }}
     >
       {content}
@@ -68,10 +64,10 @@ export function Card({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRadius: 20,
+    borderWidth: 0.5,
     padding: SPACING.md,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 12 },
+    shadowRadius: 24,
   },
 });

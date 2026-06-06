@@ -120,6 +120,16 @@ export function SettingsScreen() {
           </View>
           <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
         </Pressable>
+        <Pressable onPress={() => router.push("/(app)/claim-device" as never)} style={styles.profileRow}>
+          <View style={styles.profileIcon}>
+            <Ionicons name="qr-code" size={22} color="#FFFFFF" />
+          </View>
+          <View style={styles.profileText}>
+            <Text style={[styles.rowTitle, { color: theme.textPrimary }]}>Claim a Device</Text>
+            <Text style={[styles.rowSubtitle, { color: theme.textSecondary }]}>Scan an admin QR code to link a dryer</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
+        </Pressable>
         <Pressable onPress={() => void handleLogout()} style={styles.logoutButton}>
           <Text style={styles.logoutText}>Log Out</Text>
         </Pressable>

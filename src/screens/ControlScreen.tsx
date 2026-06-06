@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,6 +23,7 @@ import { useDryerControl } from "@/hooks/useDryerControl";
 import { useFanControl } from "@/hooks/useFanControl";
 import { useOfflineGuard } from "@/hooks/useOfflineGuard";
 import { useRealtimeSensor } from "@/hooks/useRealtimeSensor";
+import { useWeather } from "@/hooks/useWeather";
 import { COLORS, SPACING } from "@/utils/constants";
 import { getListData } from "@/utils/data";
 import { useBottomTabPadding } from "@/utils/layout";
@@ -41,9 +43,9 @@ function SegmentedMode({
   disabled?: boolean;
   onBlocked?: () => void;
 }) {
-  const { theme } = useTheme();
+  const { isDark, theme } = useTheme();
   return (
-    <View style={[styles.segment, { backgroundColor: theme.bgElevated, opacity: disabled ? 0.55 : 1 }]}>
+    <View style={[styles.segment, { opacity: disabled ? 0.55 : 1 }]}>
       {(["AUTO", "MANUAL"] as const).map((item) => (
         <Pressable
           key={item}
@@ -54,9 +56,13 @@ function SegmentedMode({
             }
             onChange(item);
           }}
-          style={[styles.segmentButton, mode === item && { backgroundColor: theme.accentPrimary }]}
+          style={[
+            styles.segmentButton,
+            mode === item && styles.segmentButtonSelected,
+            mode === item && isDark && styles.segmentButtonSelectedDark,
+          ]}
         >
-          <Text style={[styles.segmentText, { color: mode === item ? "#FFFFFF" : theme.textSecondary }]}>{item}</Text>
+          <Text style={[styles.segmentText, { color: mode === item ? theme.textPrimary : theme.textSecondary }]}>{item}</Text>
         </Pressable>
       ))}
     </View>
@@ -137,11 +143,16 @@ export function ControlScreen() {
   const [fan2On, setFan2On] = useState(false);
   const [heaterOn, setHeaterOn] = useState(false);
   const [relayOn, setRelayOn] = useState(false);
+  const [weatherConfirmOpen, setWeatherConfirmOpen] = useState(false);
   const realtimeSensor = useRealtimeSensor(selectedDevice?.deviceId);
+  const weatherQuery = useWeather(true);
   const selectedDeviceOnline = realtimeSensor.isOnline ?? (selectedDevice?.status === "online");
   const selectedRuntimeState = realtimeSensor.runtimeState ?? selectedDevice?.runtimeState ?? null;
-  const { theme } = useTheme();
+  const { isDark, theme } = useTheme();
   const bottomPadding = useBottomTabPadding(32);
+  const controlCardBg = isDark ? "#1C1C1E" : theme.bgCard;
+  const controlCardBorder = isDark ? "#2C2C2E" : theme.border;
+  const mutedPanelBg = isDark ? "#121214" : "#F3F4F6";
   const { canInteract, guard, warnOffline } = useOfflineGuard(Boolean(selectedDeviceOnline));
   const fanControls = useFanControl(selectedDevice?.deviceId ?? "");
   const lastCommandStr = useMemo(() => {
@@ -196,6 +207,14 @@ export function ControlScreen() {
         timeElapsed: 0,
         solarVoltage: latest.solarVoltage ?? 0,
         energyConsumed: latest.energy ?? 0,
+        weatherContext: weatherQuery.weather
+          ? {
+              outdoorHumidity: weatherQuery.weather.current.humidity,
+              outdoorTemperature: weatherQuery.weather.current.temperature,
+              cloudCover: weatherQuery.weather.current.cloudCover,
+              windSpeed: weatherQuery.weather.current.windSpeed,
+            }
+          : undefined,
       });
       setPrediction(result);
     } catch {
@@ -203,7 +222,7 @@ export function ControlScreen() {
     } finally {
       setIsPredicting(false);
     }
-  }, [fanSpeed, mode, selectedDevice]);
+  }, [fanSpeed, mode, selectedDevice, weatherQuery.weather]);
 
   useEffect(() => {
     void fetchPrediction();
@@ -257,9 +276,37 @@ export function ControlScreen() {
 
     if (isRunning) {
       await handleStop(selectedDevice.deviceId);
+    } else if (weatherQuery.weather) {
+      setWeatherConfirmOpen(true);
     } else {
       await handleStart(selectedDevice.deviceId, mode, temperature, fanSpeed);
     }
+  };
+
+  const suggestedSettings = useMemo(() => {
+    const humidity = weatherQuery.weather?.current.humidity ?? 0;
+    if (humidity > 75) {
+      return { temperature: 52, fanSpeed: 85 };
+    }
+    if (humidity > 60) {
+      return { temperature: 48, fanSpeed: 75 };
+    }
+    return { temperature: 45, fanSpeed: 70 };
+  }, [weatherQuery.weather?.current.humidity]);
+
+  const continueWeatherStart = async (applySuggestions: boolean) => {
+    if (!selectedDevice) {
+      return;
+    }
+
+    setWeatherConfirmOpen(false);
+    const nextTemperature = applySuggestions ? suggestedSettings.temperature : temperature;
+    const nextFanSpeed = applySuggestions ? suggestedSettings.fanSpeed : fanSpeed;
+    if (applySuggestions) {
+      setTemperature(nextTemperature);
+      setFanSpeed(nextFanSpeed);
+    }
+    await handleStart(selectedDevice.deviceId, mode, nextTemperature, nextFanSpeed);
   };
 
   const controlDisabled = !selectedDevice || !canInteract || fanControls.isLoading;
@@ -275,7 +322,7 @@ export function ControlScreen() {
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: bottomPadding }]}>
-      <Text style={styles.sectionTitle}>Device</Text>
+      <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Device</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.deviceScroller}>
         {devices.length > 0 ? (
           devices.map((device) => {
@@ -304,11 +351,17 @@ export function ControlScreen() {
       </ScrollView>
 
       {selectedDevice ? (
-        <Card style={styles.selectedCard}>
+        <Card
+          style={[
+            styles.selectedCard,
+            { backgroundColor: controlCardBg, borderColor: controlCardBorder },
+            !selectedDeviceOnline && { backgroundColor: mutedPanelBg, borderColor: controlCardBorder, opacity: 0.96 },
+          ]}
+        >
           <View style={styles.cardTop}>
             <View>
-              <Text style={styles.cardTitle}>{selectedDevice.name}</Text>
-              <Text style={styles.cardSubtitle}>{selectedDevice.deviceId}</Text>
+              <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>{selectedDevice.name}</Text>
+              <Text style={[styles.cardSubtitle, { color: theme.textSecondary }]}>{selectedDevice.deviceId}</Text>
             </View>
             <StatusBadge status={selectedDeviceOnline ? "online" : "offline"} size="sm" />
           </View>
@@ -321,25 +374,31 @@ export function ControlScreen() {
         status={commandStatus}
       />
 
-      <Card style={styles.panel}>
+      <Card
+        style={[
+          styles.panel,
+          { backgroundColor: controlCardBg, borderColor: controlCardBorder },
+          !canInteract && { backgroundColor: mutedPanelBg, opacity: 0.96 },
+        ]}
+      >
         <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Mode</Text>
         <SegmentedMode disabled={!canInteract} mode={mode} onBlocked={warnOffline} onChange={setMode} />
         {mode === "AUTO" ? (
-          <Card style={styles.aiCard}>
+          <Card style={[styles.aiCard, { backgroundColor: isDark ? "#132417" : "#F0FDF4", borderColor: isDark ? "#24452B" : theme.border }]}>
             <View style={styles.cardTop}>
-              <Text style={styles.cardTitle}>AI Prediction</Text>
+              <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>AI Prediction</Text>
               {isPredicting ? <ActivityIndicator color={COLORS.primary} /> : <Ionicons name="sparkles" size={21} color={COLORS.primary} />}
             </View>
             {prediction ? (
               <>
-                <Text style={styles.aiMetric}>30 min moisture: {prediction.predictedMoisture30min.toFixed(1)}%</Text>
-                <Text style={styles.aiMetric}>Time to target: {prediction.estimatedMinutesToTarget} min</Text>
-                <Text style={styles.cardSubtitle}>{prediction.recommendation}</Text>
+                <Text style={[styles.aiMetric, { color: theme.textPrimary }]}>30 min moisture: {prediction.predictedMoisture30min.toFixed(1)}%</Text>
+                <Text style={[styles.aiMetric, { color: theme.textPrimary }]}>Time to target: {prediction.estimatedMinutesToTarget} min</Text>
+                <Text style={[styles.cardSubtitle, { color: theme.textSecondary }]}>{prediction.recommendation}</Text>
               </>
             ) : (
             <Text style={[styles.cardSubtitle, { color: theme.textSecondary }]}>Prediction appears when recent sensor data is available.</Text>
             )}
-            <Text style={styles.autoStopText}>AI will auto-stop when moisture reaches 14%.</Text>
+            <Text style={[styles.autoStopText, { color: theme.accentPrimary }]}>AI will auto-stop when moisture reaches 14%.</Text>
             <Pressable onPress={() => router.push("/(app)/ai-prediction")} style={styles.aiShortcut}>
               <Ionicons name="analytics" size={18} color={COLORS.primary} />
               <Text style={styles.aiShortcutText}>Open AI Prediction</Text>
@@ -349,38 +408,44 @@ export function ControlScreen() {
           <>
             <View style={styles.sliderBlock}>
               <View style={styles.sliderHeader}>
-                <Text style={styles.sliderLabel}>Temperature (C)</Text>
-                <Text style={styles.sliderValue}>{temperature}</Text>
+                <Text style={[styles.sliderLabel, { color: theme.textSecondary }]}>Temperature</Text>
+                <Text style={[styles.sliderValue, { color: theme.accentPrimary }]}>{temperature}°C</Text>
               </View>
-              <Slider
-                disabled={isRunning || !canInteract}
-                maximumTrackTintColor={theme.border}
-                maximumValue={75}
-                minimumTrackTintColor={COLORS.primary}
-                minimumValue={35}
-                onValueChange={setTemperature}
-                step={1}
-                thumbTintColor={COLORS.primary}
-                value={temperature}
-              />
+              <View style={styles.sliderShell}>
+                <Slider
+                  disabled={isRunning || !canInteract}
+                  maximumTrackTintColor="rgba(118,118,128,0.18)"
+                  maximumValue={75}
+                  minimumTrackTintColor={COLORS.primary}
+                  minimumValue={35}
+                  onValueChange={setTemperature}
+                  step={1}
+                  style={styles.iosSlider}
+                  thumbTintColor="#FFFFFF"
+                  value={temperature}
+                />
+              </View>
             </View>
 
             <View style={styles.sliderBlock}>
               <View style={styles.sliderHeader}>
-                <Text style={styles.sliderLabel}>Fan Speed (%)</Text>
-                <Text style={styles.sliderValue}>{fanSpeed}</Text>
+                <Text style={[styles.sliderLabel, { color: theme.textSecondary }]}>Fan Speed</Text>
+                <Text style={[styles.sliderValue, { color: theme.accentPrimary }]}>{fanSpeed}%</Text>
               </View>
-              <Slider
-                disabled={isRunning || !canInteract}
-                maximumTrackTintColor={theme.border}
-                maximumValue={100}
-                minimumTrackTintColor={COLORS.primary}
-                minimumValue={0}
-                onValueChange={setFanSpeed}
-                step={5}
-                thumbTintColor={COLORS.primary}
-                value={fanSpeed}
-              />
+              <View style={styles.sliderShell}>
+                <Slider
+                  disabled={isRunning || !canInteract}
+                  maximumTrackTintColor="rgba(118,118,128,0.18)"
+                  maximumValue={100}
+                  minimumTrackTintColor={COLORS.primary}
+                  minimumValue={0}
+                  onValueChange={setFanSpeed}
+                  step={5}
+                  style={styles.iosSlider}
+                  thumbTintColor="#FFFFFF"
+                  value={fanSpeed}
+                />
+              </View>
             </View>
           </>
         )}
@@ -392,7 +457,7 @@ export function ControlScreen() {
         style={[
           styles.primaryButton,
           isRunning ? styles.stopButton : styles.startButton,
-          (!selectedDevice || !canInteract || isControlling) && styles.disabledButton,
+          (!selectedDevice || !canInteract || isControlling) && styles.primaryButtonDisabled,
         ]}
       >
         {isControlling ? (
@@ -408,8 +473,8 @@ export function ControlScreen() {
 
       {mode === "MANUAL" ? (
         <>
-          <Card style={styles.panel}>
-            <Text style={styles.sectionTitle}>Fan Control</Text>
+          <Card style={[styles.panel, { backgroundColor: controlCardBg, borderColor: controlCardBorder }]}>
+            <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Fan Control</Text>
             <ToggleControlRow
               disabled={controlDisabled}
               isLoading={fanControls.isLoading}
@@ -436,9 +501,9 @@ export function ControlScreen() {
             />
           </Card>
 
-          <Card style={styles.panel}>
+          <Card style={[styles.panel, { backgroundColor: controlCardBg, borderColor: controlCardBorder }]}>
             <Pressable style={styles.advancedHeader} onPress={() => setAdvancedOpen((open) => !open)}>
-              <Text style={styles.sectionTitle}>Advanced Controls</Text>
+              <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Advanced Controls</Text>
               <Ionicons name={advancedOpen ? "chevron-up" : "chevron-down"} size={22} color={theme.textPrimary} />
             </Pressable>
             {advancedOpen ? (
@@ -477,6 +542,54 @@ export function ControlScreen() {
         </>
       ) : null}
       </ScrollView>
+
+      <Modal animationType="fade" transparent visible={weatherConfirmOpen} onRequestClose={() => setWeatherConfirmOpen(false)}>
+        <View style={styles.weatherModalBackdrop}>
+          <View style={[styles.weatherModal, { backgroundColor: theme.bgCard }]}>
+            <View style={styles.cardTop}>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>Current Weather</Text>
+              <Pressable onPress={() => setWeatherConfirmOpen(false)}>
+                <Ionicons name="close" size={24} color={theme.textPrimary} />
+              </Pressable>
+            </View>
+            <Text style={[styles.cardSubtitle, { color: theme.textSecondary }]}>
+              Outdoor Humidity: {weatherQuery.weather?.current.humidity.toFixed(0)}%
+            </Text>
+            <Text style={[styles.cardSubtitle, { color: theme.textSecondary }]}>
+              Temperature: {weatherQuery.weather?.current.temperature.toFixed(0)} C
+            </Text>
+            <Text style={[styles.cardSubtitle, { color: theme.textSecondary, textTransform: "capitalize" }]}>
+              Conditions: {weatherQuery.weather?.current.description}
+            </Text>
+            <View style={styles.weatherAdviceBox}>
+              <Ionicons
+                name={weatherQuery.weather?.dryingAdvice.suitable ? "leaf-outline" : "warning-outline"}
+                size={20}
+                color={weatherQuery.weather?.dryingAdvice.suitable ? COLORS.success : COLORS.warning}
+              />
+              <View style={styles.weatherAdviceText}>
+                <Text style={[styles.controlLabel, { color: theme.textPrimary }]}>Drying Advisory</Text>
+                <Text style={[styles.cardSubtitle, { color: theme.textSecondary }]}>
+                  {weatherQuery.weather?.dryingAdvice.recommendation}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.suggestionBox}>
+              <Text style={[styles.controlLabel, { color: theme.textPrimary }]}>Suggested Settings</Text>
+              <Text style={[styles.cardSubtitle, { color: theme.textSecondary }]}>Temperature: {suggestedSettings.temperature} C</Text>
+              <Text style={[styles.cardSubtitle, { color: theme.textSecondary }]}>Fan Speed: {suggestedSettings.fanSpeed}%</Text>
+            </View>
+            <View style={styles.weatherModalActions}>
+              <Pressable onPress={() => void continueWeatherStart(true)} style={styles.applyButton}>
+                <Text style={styles.applyButtonText}>Apply Suggestions</Text>
+              </Pressable>
+              <Pressable onPress={() => void continueWeatherStart(false)} style={[styles.continueButton, { borderColor: theme.border }]}>
+                <Text style={[styles.continueButtonText, { color: theme.textPrimary }]}>Continue</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -515,6 +628,18 @@ const styles = StyleSheet.create({
   },
   aiShortcutText: {
     color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  applyButton: {
+    alignItems: "center",
+    backgroundColor: COLORS.primary,
+    borderRadius: 14,
+    flex: 1,
+    paddingVertical: 13,
+  },
+  applyButtonText: {
+    color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "900",
   },
@@ -558,6 +683,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
+  continueButton: {
+    alignItems: "center",
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
+    paddingVertical: 13,
+  },
+  continueButtonText: {
+    fontSize: 13,
+    fontWeight: "900",
+  },
   deviceChip: {
     alignItems: "center",
     backgroundColor: COLORS.card,
@@ -594,6 +730,10 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.45,
   },
+  disabledPanel: {
+    backgroundColor: "#F3F4F6",
+    opacity: 0.86,
+  },
   emptyText: {
     color: COLORS.textSecondary,
     fontSize: 14,
@@ -606,14 +746,27 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     paddingBottom: SPACING.sm,
   },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "900",
+  },
   panel: {
     gap: SPACING.md,
+  },
+  offlineCard: {
+    backgroundColor: "#F3F4F6",
+    borderColor: "#D1D5DB",
+    opacity: 0.9,
   },
   primaryButton: {
     alignItems: "center",
     borderRadius: 18,
     height: 58,
     justifyContent: "center",
+  },
+  primaryButtonDisabled: {
+    backgroundColor: "#9CA3AF",
+    opacity: 0.72,
   },
   primaryButtonText: {
     color: "#FFFFFF",
@@ -626,23 +779,35 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   segment: {
-    backgroundColor: "#EEF2F7",
-    borderRadius: 14,
+    backgroundColor: "rgba(118,118,128,0.13)",
+    borderRadius: 16,
     flexDirection: "row",
-    padding: 4,
+    padding: 3,
   },
   segmentButton: {
     alignItems: "center",
-    borderRadius: 11,
+    borderRadius: 13,
     flex: 1,
-    paddingVertical: 11,
+    paddingVertical: 10,
   },
   segmentButtonActive: {
     backgroundColor: COLORS.primary,
   },
+  segmentButtonSelected: {
+    backgroundColor: "rgba(255,255,255,0.92)",
+    shadowColor: "#000000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+  },
+  segmentButtonSelectedDark: {
+    backgroundColor: "#2C2C2E",
+    shadowOpacity: 0.32,
+  },
   segmentText: {
     color: COLORS.textSecondary,
-    fontWeight: "900",
+    fontSize: 13,
+    fontWeight: "800",
   },
   segmentTextActive: {
     color: "#FFFFFF",
@@ -651,7 +816,7 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   sliderBlock: {
-    gap: SPACING.sm,
+    gap: 10,
   },
   sliderHeader: {
     alignItems: "center",
@@ -659,14 +824,26 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   sliderLabel: {
-    color: COLORS.textPrimary,
-    fontSize: 14,
-    fontWeight: "800",
+    color: "#636366",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  iosSlider: {
+    height: 34,
+    marginHorizontal: -4,
+  },
+  sliderShell: {
+    backgroundColor: "rgba(118,118,128,0.12)",
+    borderRadius: 14,
+    height: 28,
+    justifyContent: "center",
+    overflow: "hidden",
   },
   sliderValue: {
     color: COLORS.primary,
     fontSize: 22,
     fontWeight: "900",
+    letterSpacing: -0.4,
   },
   startButton: {
     backgroundColor: COLORS.success,
@@ -695,6 +872,9 @@ const styles = StyleSheet.create({
   },
   stopButton: {
     backgroundColor: COLORS.danger,
+  },
+  suggestionBox: {
+    gap: 4,
   },
   toggleThumb: {
     backgroundColor: "#FFFFFF",
@@ -738,5 +918,34 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
     textAlign: "center",
+  },
+  weatherAdviceBox: {
+    alignItems: "flex-start",
+    backgroundColor: "#FFFBEB",
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: SPACING.sm,
+    padding: SPACING.sm,
+  },
+  weatherAdviceText: {
+    flex: 1,
+    gap: 3,
+  },
+  weatherModal: {
+    borderRadius: 22,
+    gap: SPACING.md,
+    margin: SPACING.lg,
+    padding: SPACING.lg,
+    width: "92%",
+  },
+  weatherModalActions: {
+    flexDirection: "row",
+    gap: SPACING.sm,
+  },
+  weatherModalBackdrop: {
+    alignItems: "center",
+    backgroundColor: "rgba(17, 24, 39, 0.48)",
+    flex: 1,
+    justifyContent: "center",
   },
 });

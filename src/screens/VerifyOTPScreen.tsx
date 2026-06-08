@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { Link, router, useLocalSearchParams } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -43,6 +43,21 @@ export function VerifyOTPScreen() {
   const [error, setError] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const [resendSeconds, setResendSeconds] = useState(60);
+  const otpInputRef = useRef<{ focus: () => void } | null>(null);
+  const otpDigits = useMemo(() => Array.from({ length: 6 }, (_, index) => otp[index] ?? ""), [otp]);
+
+  useEffect(() => {
+    if (resendSeconds <= 0) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setResendSeconds((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [resendSeconds]);
 
   const submit = async () => {
     setIsVerifying(true);
@@ -76,6 +91,7 @@ export function VerifyOTPScreen() {
         verificationChannel,
       });
       setMessage(nextMessage);
+      setResendSeconds(60);
     } catch (resendError) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setError(resendError instanceof Error ? resendError.message : "Could not resend code");
@@ -134,13 +150,33 @@ export function VerifyOTPScreen() {
           />
 
           <Text style={styles.label}>Verification Code</Text>
+          <Pressable
+            accessibilityLabel="Enter 6 digit verification code"
+            accessibilityRole="button"
+            onPress={() => otpInputRef.current?.focus()}
+            style={styles.otpBoxRow}
+          >
+            {otpDigits.map((digit, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.otpBox,
+                  otp.length === index && styles.otpBoxActive,
+                  Boolean(digit) && styles.otpBoxFilled,
+                ]}
+              >
+                <Text style={styles.otpBoxText}>{digit}</Text>
+              </View>
+            ))}
+          </Pressable>
           <TextInput
+            ref={otpInputRef}
+            caretHidden
             keyboardType="number-pad"
             maxLength={6}
-            onChangeText={(value) => setOtp(value.replace(/\D/g, ""))}
-            placeholder="000000"
-            placeholderTextColor="#9CA3AF"
-            style={[styles.input, styles.otpInput]}
+            onChangeText={(value) => setOtp(value.replace(/\D/g, "").slice(0, 6))}
+            style={styles.hiddenOtpInput}
+            textContentType="oneTimeCode"
             value={otp}
           />
 
@@ -160,14 +196,23 @@ export function VerifyOTPScreen() {
           </Pressable>
 
           <Pressable
-            disabled={isResending || (verificationChannel === "email" ? !email.trim() : !phoneNumber.trim())}
+            disabled={
+              isResending ||
+              resendSeconds > 0 ||
+              (verificationChannel === "email" ? !email.trim() : !phoneNumber.trim())
+            }
             onPress={resend}
-            style={styles.secondaryButton}
+            style={[
+              styles.secondaryButton,
+              (isResending || resendSeconds > 0) && styles.secondaryButtonDisabled,
+            ]}
           >
             {isResending ? (
               <ActivityIndicator color={COLORS.primary} />
             ) : (
-              <Text style={styles.secondaryButtonText}>Resend code</Text>
+              <Text style={styles.secondaryButtonText}>
+                {resendSeconds > 0 ? `Resend code in ${resendSeconds}s` : "Resend code"}
+              </Text>
             )}
           </Pressable>
 
@@ -257,6 +302,12 @@ const styles = StyleSheet.create({
     height: 50,
     paddingHorizontal: SPACING.md,
   },
+  hiddenOtpInput: {
+    height: 1,
+    opacity: 0,
+    position: "absolute",
+    width: 1,
+  },
   label: {
     color: COLORS.textPrimary,
     fontSize: 14,
@@ -280,16 +331,39 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
-  otpInput: {
-    fontSize: 24,
+  otpBox: {
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#CBD5C0",
+    borderRadius: 12,
+    borderWidth: 1,
+    flex: 1,
+    height: 54,
+    justifyContent: "center",
+  },
+  otpBoxActive: {
+    borderColor: COLORS.primary,
+    borderWidth: 2,
+  },
+  otpBoxFilled: {
+    backgroundColor: "#F5FAF2",
+  },
+  otpBoxRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  otpBoxText: {
+    color: COLORS.textPrimary,
+    fontSize: 22,
     fontWeight: "800",
-    letterSpacing: 6,
-    textAlign: "center",
   },
   secondaryButton: {
     alignItems: "center",
     height: 42,
     justifyContent: "center",
+  },
+  secondaryButtonDisabled: {
+    opacity: 0.55,
   },
   secondaryButtonText: {
     color: COLORS.primary,

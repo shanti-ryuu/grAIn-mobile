@@ -185,6 +185,17 @@ export function AIPredictionScreen() {
           <Text style={[styles.metricText, { color: theme.textSecondary }]}>Confidence: {prediction ? `${prediction.confidence.toFixed(0)}%` : "--"}</Text>
           <Text style={[styles.metricText, { color: theme.textSecondary }]}>Algorithm: {prediction?.algorithm ?? "--"}</Text>
         </View>
+        {prediction?.confidenceInterval ? (
+          <View style={[styles.intervalBox, { backgroundColor: theme.bgElevated, borderColor: theme.border }]}>
+            <Text style={[styles.intervalLabel, { color: theme.textSecondary }]}>Confidence interval</Text>
+            <Text style={[styles.intervalValue, { color: theme.textPrimary }]}>
+              {prediction.confidenceInterval.lowerMoisture.toFixed(1)}% - {prediction.confidenceInterval.upperMoisture.toFixed(1)}%
+            </Text>
+            <Text style={[styles.conditionNote, { color: theme.textSecondary }]}>
+              +/-{prediction.confidenceInterval.margin.toFixed(1)} moisture points at {prediction.confidenceInterval.confidenceLevel.toFixed(0)}% confidence.
+            </Text>
+          </View>
+        ) : null}
         {error ? <Text style={styles.warningText}>Using fallback: {error}</Text> : null}
       </Card>
 
@@ -256,7 +267,8 @@ export function AIPredictionScreen() {
             <Text style={[styles.metricText, { color: theme.textSecondary }]}>
               R2 score: {(prediction?.modelMetrics?.moistureR2_ensemble ?? prediction?.modelMetrics?.moistureR2)?.toFixed(4) ?? "--"}
             </Text>
-            <Text style={[styles.metricText, { color: theme.textSecondary }]}>Algorithm: {prediction?.algorithm ?? "--"}</Text>
+            <Text style={[styles.metricText, { color: theme.textSecondary }]}>Selected model: {prediction?.modelSelection?.selectedModel ?? prediction?.algorithm ?? "--"}</Text>
+            <Text style={[styles.metricText, { color: theme.textSecondary }]}>{prediction?.modelSelection?.reason ?? "Model selection details unavailable."}</Text>
             <Text style={[styles.metricText, { color: theme.textSecondary }]}>Last updated: {lastFetchedAt ? relativeTime(lastFetchedAt) : "--"}</Text>
           </View>
         ) : null}
@@ -343,6 +355,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
+  },
+  intervalBox: {
+    borderRadius: 14,
+    borderWidth: 0.5,
+    gap: 3,
+    padding: SPACING.md,
+  },
+  intervalLabel: {
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  intervalValue: {
+    fontSize: 18,
+    fontWeight: "900",
   },
   metricRow: {
     flexDirection: "row",

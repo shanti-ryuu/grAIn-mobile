@@ -35,6 +35,8 @@ interface AuthContextValue {
     verificationChannel?: "email" | "sms";
   }) => Promise<AuthUser>;
   resendOtp: (payload: { email?: string; phoneNumber?: string; verificationChannel?: "email" | "sms" }) => Promise<string>;
+  forgotPassword: (identifier: string, verificationChannel?: "email" | "sms") => Promise<string>;
+  resetPassword: (identifier: string, otp: string, newPassword: string, verificationChannel?: "email" | "sms") => Promise<string>;
   refreshUser: () => Promise<AuthUser>;
   logout: () => Promise<void>;
 }
@@ -214,6 +216,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return response.message;
   }, []);
 
+  const forgotPassword = useCallback(async (identifier: string, verificationChannel: "email" | "sms" = "email") => {
+    setError(null);
+    const response = await grainApi.auth.forgotPassword({ identifier, verificationChannel });
+    return response.message;
+  }, []);
+
+  const resetPassword = useCallback(async (identifier: string, otp: string, newPassword: string, verificationChannel: "email" | "sms" = "email") => {
+    setError(null);
+    const response = await grainApi.auth.resetPassword({ identifier, otp, newPassword, verificationChannel });
+    return response.message;
+  }, []);
+
   const refreshUser = useCallback(async () => {
     const currentUser = await grainApi.auth.me(30000);
     setUser(currentUser);
@@ -229,13 +243,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isReconnecting,
       error,
       login,
+      forgotPassword,
       refreshUser,
       resendOtp,
+      resetPassword,
       signup,
       verifyOtp,
       logout,
     }),
-    [error, isAuthenticated, isLoading, isReconnecting, login, logout, refreshUser, resendOtp, signup, user, verifyOtp],
+    [
+      error,
+      forgotPassword,
+      isAuthenticated,
+      isLoading,
+      isReconnecting,
+      login,
+      logout,
+      refreshUser,
+      resendOtp,
+      resetPassword,
+      signup,
+      user,
+      verifyOtp,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

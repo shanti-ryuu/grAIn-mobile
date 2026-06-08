@@ -49,6 +49,8 @@ function localFallback(payload: PredictionPayload): PredictionResponse {
       ? 0
       : Math.ceil((payload.moisture - TARGET_MOISTURE) / rate);
   const isDryingComplete = payload.moisture <= TARGET_MOISTURE;
+  const confidence = 65;
+  const margin = Math.max(0.3, 3.2 - confidence * 0.028);
   const recommendationType =
     payload.temperature > 65 || payload.moisture < 10 ? "critical" : payload.temperature < 38 || payload.humidity > 75 ? "warning" : "optimal";
 
@@ -64,11 +66,22 @@ function localFallback(payload: PredictionPayload): PredictionResponse {
           : "Drying conditions are stable. Continue monitoring.",
     recommendationType,
     efficiencyScore: Math.max(0, Math.min(100, Math.round(rate * 8000))),
-    confidence: 65,
+    confidence,
+    confidenceInterval: {
+      lowerMoisture: Math.max(TARGET_MOISTURE, Number((predictedMoisture30min - margin).toFixed(2))),
+      upperMoisture: Number((predictedMoisture30min + margin).toFixed(2)),
+      margin: Number(margin.toFixed(2)),
+      confidenceLevel: confidence,
+    },
     isDryingComplete,
     projectedCurve: buildCurve(payload.moisture, rate),
     targetMoisture: TARGET_MOISTURE,
     algorithm: "local-fallback",
+    modelSelection: {
+      selectedModel: "local-fallback",
+      reason: "Local rule-based fallback selected because the backend prediction service was unreachable.",
+      candidates: [],
+    },
     weatherEnhanced: Boolean(payload.weatherContext),
     weatherContext: payload.weatherContext ?? null,
     dryingConditionNote: payload.weatherContext

@@ -7,6 +7,7 @@ import { AssistantFAB } from "@/components/AssistantFAB";
 import { AssistantModal } from "@/components/AssistantModal";
 import { AnimatedTabBar } from "@/components/AnimatedTabBar";
 import { ButilReaction } from "@/components/mascot/ButilReaction";
+import { PostLoginSetupGate } from "@/components/PostLoginSetupGate";
 import { ServerStatusBanner } from "@/components/ServerStatusBanner";
 import { tabScreenOptions, tabs } from "@/components/Navigation";
 import { AssistantProvider } from "@/context/AssistantContext";
@@ -75,6 +76,7 @@ export default function AppLayout() {
               <Tabs.Screen name="profile" options={{ href: null }} />
               <Tabs.Screen name="add-device" options={{ href: null }} />
               <Tabs.Screen name="weather-detail" options={{ href: null }} />
+              <Tabs.Screen name="grain-type/[type]" options={{ href: null }} />
             </Tabs>
           </View>
         ) : (
@@ -97,12 +99,14 @@ export default function AppLayout() {
             <Tabs.Screen name="profile" options={{ href: null }} />
             <Tabs.Screen name="add-device" options={{ href: null }} />
             <Tabs.Screen name="weather-detail" options={{ href: null }} />
+            <Tabs.Screen name="grain-type/[type]" options={{ href: null }} />
           </Tabs>
           </SafeAreaView>
         )}
         <AssistantFAB />
         <AssistantModal />
         <ButilReaction />
+        <PostLoginSetupGate />
         <InteractiveTutorial />
       </View>
     </AssistantProvider>

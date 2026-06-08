@@ -9,7 +9,7 @@ interface UseDryingSessionsResult {
   activeSession: SessionSummary | null;
   isLoading: boolean;
   error: string | null;
-  startSession: (deviceId: string, grainType?: string, targetMoisture?: number) => Promise<void>;
+  startSession: (deviceId: string, grainType?: string, targetMoisture?: number, mode?: "AUTO" | "MANUAL") => Promise<void>;
   endSession: (sessionId: string, action: "complete" | "abort") => Promise<void>;
   refetch: () => Promise<void>;
 }
@@ -45,8 +45,8 @@ export function useDryingSessions(deviceId?: string): UseDryingSessionsResult {
   }, [refetch]);
 
   const startSession = useCallback(
-    async (nextDeviceId: string, grainType = "rice", targetMoisture = 14) => {
-      await grainApi.sessions.start({ deviceId: nextDeviceId, grainType, targetMoisture });
+    async (nextDeviceId: string, grainType = "rice", targetMoisture = 14, mode: "AUTO" | "MANUAL" = "MANUAL") => {
+      await grainApi.sessions.start({ deviceId: nextDeviceId, grainType, targetMoisture, mode });
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await refetch();
     },

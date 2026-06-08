@@ -71,6 +71,35 @@ export interface PaginatedResponse<T> {
   };
 }
 
+export interface PredictiveControlState {
+  enabled: boolean;
+  status: "idle" | "cooldown" | "action_sent" | "maintaining";
+  lastAction?: "STOP" | "EMERGENCY_STOP" | "REDUCE_TEMP" | "INCREASE_FAN" | "MAINTAIN";
+  lastActionAt?: string;
+  nextAllowedAt?: string;
+  reason?: string;
+  commandId?: string;
+}
+
+export interface DeviceRuntimeState {
+  isRunning?: boolean;
+  currentMode?: "AUTO" | "MANUAL";
+  heaterState?: "ON" | "OFF";
+  fan1State?: "ON" | "OFF";
+  fan2State?: "ON" | "OFF";
+  relayState?: "ON" | "OFF";
+  stepperState?: "ON" | "OFF" | "CW" | "CCW";
+  lastSeen?: string;
+  activeCommand?: string;
+  pendingCommand?: string;
+  commandAcknowledged?: boolean;
+  currentTemperature?: number;
+  currentHumidity?: number;
+  currentMoisture?: number;
+  currentWeight?: number;
+  predictiveControl?: PredictiveControlState;
+}
+
 export interface DeviceSummary {
   _id: string;
   id?: string;
@@ -80,7 +109,7 @@ export interface DeviceSummary {
   status: "online" | "offline";
   lastActive: string;
   lastMoisture: number;
-  runtimeState?: Record<string, unknown>;
+  runtimeState?: DeviceRuntimeState;
 }
 
 export interface ClaimedDeviceSummary {
@@ -109,6 +138,7 @@ export interface SessionSummary {
   deviceId: string;
   status: "active" | "completed" | "aborted";
   grainType: string;
+  mode?: "AUTO" | "MANUAL";
   startMoisture: number;
   currentMoisture: number;
   targetMoisture: number;
@@ -162,6 +192,12 @@ export interface PredictionResponse {
   recommendationType: "optimal" | "warning" | "critical";
   efficiencyScore: number;
   confidence: number;
+  confidenceInterval?: {
+    lowerMoisture: number;
+    upperMoisture: number;
+    margin: number;
+    confidenceLevel: number;
+  };
   isDryingComplete: boolean;
   projectedCurve?: { minutesFromNow: number; predictedMoisture: number }[];
   targetMoisture: number;
@@ -169,6 +205,11 @@ export interface PredictionResponse {
   weatherEnhanced?: boolean;
   weatherContext?: WeatherContext | null;
   dryingConditionNote?: string;
+  modelSelection?: {
+    selectedModel: string;
+    reason: string;
+    candidates: { model: string; score: number | null }[];
+  };
   modelMetrics?: {
     moistureR2?: number;
     moistureR2_rf?: number | null;
@@ -249,9 +290,14 @@ export interface NotificationSummary {
     | "alert_warning"
     | "device_offline"
     | "session_started"
-    | "session_aborted";
+    | "session_aborted"
+    | "predictive_control"
+    | "ai_action"
+    | "weather_alert"
+    | "session_milestone";
   title: string;
   body: string;
+  data?: Record<string, string>;
   isRead: boolean;
   createdAt: string;
 }
@@ -278,6 +324,16 @@ export interface AnalyticsOverview {
     sessionCount: number;
   }[];
   energyTrend: { timestamp?: string; date: string; totalEnergy: number; avgEnergy: number; sessionCount: number }[];
+  solarEfficiencyTrend?: {
+    timestamp?: string;
+    date: string;
+    avgVoltage: number;
+    avgCurrent: number;
+    avgPowerWatts: number;
+    efficiencyScore: number;
+    sampleCount: number;
+  }[];
+  grainTypeComparison?: GrainTypeAnalytics[];
   totals?: {
     sessions: number;
     completedSessions: number;
@@ -308,6 +364,42 @@ export interface AnalyticsOverview {
     info: number;
   };
   period?: "daily" | "weekly" | "monthly";
+  deviceId?: string | null;
+  generatedAt?: string;
+}
+
+export interface GrainTypeAnalytics {
+  grainType: string;
+  sessionCount: number;
+  avgEfficiency: number;
+  avgDryingTime: number;
+  avgEnergyUsed: number;
+  avgMoistureReduction: number;
+  successRate: number;
+}
+
+export interface AnalyticsModeStats {
+  sessionCount: number;
+  avgEfficiency: number;
+  avgDryingTime: number;
+  avgEnergyUsed: number;
+  overdryingIncidents: number;
+  underdryingIncidents: number;
+  successRate: number;
+}
+
+export interface AnalyticsCompare {
+  comparison: {
+    auto: AnalyticsModeStats;
+    manual: AnalyticsModeStats;
+    improvement: {
+      efficiencyGain: number;
+      timeSaved: number;
+      energySaved: number;
+      overdryingReduction: number;
+    };
+  };
+  period: "all" | "weekly" | "monthly";
   deviceId?: string | null;
   generatedAt?: string;
 }
@@ -474,6 +566,10 @@ export const grainApi = {
       apiClient.post<AuthResponse, AuthResponse>("/auth/verify-otp", payload),
     resendOtp: (payload: { email?: string; phoneNumber?: string; verificationChannel?: "email" | "sms" }) =>
       apiClient.post<MessageResponse, MessageResponse>("/auth/resend-otp", payload),
+    forgotPassword: (payload: { identifier: string; verificationChannel?: "email" | "sms" }) =>
+      apiClient.post<MessageResponse, MessageResponse>("/auth/forgot-password", payload),
+    resetPassword: (payload: { identifier: string; otp: string; newPassword: string; verificationChannel?: "email" | "sms" }) =>
+      apiClient.post<MessageResponse, MessageResponse>("/auth/reset-password", payload),
     me: async (timeout?: number) => {
       const response = await apiClient.post<MeResponse, MeResponse>("/auth/me", undefined, withTimeout(timeout));
       return "user" in response ? response.user : response;
@@ -514,7 +610,7 @@ export const grainApi = {
     list: (params?: RequestParams) => apiClient.get<SessionSummary[] | PaginatedResponse<SessionSummary>, SessionSummary[] | PaginatedResponse<SessionSummary>>("/sessions", { params }),
     getById: (id: string) => apiClient.get<SessionSummary, SessionSummary>(`/sessions/${id}`),
     getReport: (id: string) => apiClient.get<SessionReportData, SessionReportData>(`/sessions/${id}/report`),
-    start: (payload: { deviceId: string; grainType?: string; targetMoisture?: number }) =>
+    start: (payload: { deviceId: string; grainType?: string; mode?: "AUTO" | "MANUAL"; targetMoisture?: number }) =>
       apiClient.post("/sessions", payload),
     end: (id: string, action: "complete" | "abort") => apiClient.patch(`/sessions/${id}`, { action }),
     getActive: (deviceId?: string) =>
@@ -543,6 +639,8 @@ export const grainApi = {
   analytics: {
     getOverview: (period: "daily" | "weekly" | "monthly", deviceId?: string) =>
       apiClient.get<AnalyticsOverview, AnalyticsOverview>("/analytics/overview", { params: { period, deviceId } }),
+    compare: (period: "all" | "weekly" | "monthly", deviceId?: string) =>
+      apiClient.get<AnalyticsCompare, AnalyticsCompare>("/analytics/compare", { params: { period, deviceId } }),
   },
   weather: {
     get: (lat: number, lon: number) =>

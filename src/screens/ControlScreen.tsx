@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 
-import { grainApi, PredictionResponse, SensorReading } from "@/api/grain-api-client";
+import { grainApi, PredictionResponse, PredictiveControlState, SensorReading } from "@/api/grain-api-client";
 import { Card } from "@/components/Card";
 import { CommandStatusBanner } from "@/components/CommandStatusBanner";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -117,6 +117,31 @@ function runtimeSwitch(runtimeState: Record<string, unknown> | null | undefined,
   return runtimeState?.[key] === "ON";
 }
 
+function getPredictiveControlState(runtimeState: Record<string, unknown> | null | undefined): PredictiveControlState | null {
+  const value = runtimeState?.predictiveControl;
+  return value && typeof value === "object" ? (value as PredictiveControlState) : null;
+}
+
+function predictiveControlTitle(state: PredictiveControlState | null): string {
+  if (!state?.enabled) {
+    return "Predictive control idle";
+  }
+
+  if (state.status === "action_sent" && state.lastAction) {
+    return `Auto action: ${state.lastAction.replace("_", " ")}`;
+  }
+
+  if (state.status === "cooldown") {
+    return "Predictive control cooling down";
+  }
+
+  if (state.status === "maintaining") {
+    return "Maintaining optimal conditions";
+  }
+
+  return "Predictive control active";
+}
+
 export function ControlScreen() {
   const { devices, isLoading: devicesLoading } = useDevices();
   const {
@@ -148,6 +173,7 @@ export function ControlScreen() {
   const weatherQuery = useWeather(true);
   const selectedDeviceOnline = realtimeSensor.isOnline ?? (selectedDevice?.status === "online");
   const selectedRuntimeState = realtimeSensor.runtimeState ?? selectedDevice?.runtimeState ?? null;
+  const predictiveControl = getPredictiveControlState(selectedRuntimeState);
   const { isDark, theme } = useTheme();
   const bottomPadding = useBottomTabPadding(32);
   const controlCardBg = isDark ? "#1C1C1E" : theme.bgCard;
@@ -399,6 +425,29 @@ export function ControlScreen() {
             <Text style={[styles.cardSubtitle, { color: theme.textSecondary }]}>Prediction appears when recent sensor data is available.</Text>
             )}
             <Text style={[styles.autoStopText, { color: theme.accentPrimary }]}>AI will auto-stop when moisture reaches 14%.</Text>
+            <View
+              style={[
+                styles.predictiveCard,
+                {
+                  backgroundColor: isDark ? "#0F1F13" : "#F0FDF4",
+                  borderColor: isDark ? "#24452B" : "#BBF7D0",
+                },
+              ]}
+            >
+              <View style={styles.predictiveHeader}>
+                <Ionicons
+                  name={predictiveControl?.status === "action_sent" ? "flash" : "pulse"}
+                  size={17}
+                  color={COLORS.primary}
+                />
+                <Text style={[styles.predictiveTitle, { color: theme.textPrimary }]}>
+                  {predictiveControlTitle(predictiveControl)}
+                </Text>
+              </View>
+              <Text style={[styles.cardSubtitle, { color: theme.textSecondary }]}>
+                {predictiveControl?.reason ?? "AUTO mode will stop at 14%, reduce heat above 65C, emergency stop above 70C, and increase airflow above 75% humidity."}
+              </Text>
+            </View>
             <Pressable onPress={() => router.push("/(app)/ai-prediction")} style={styles.aiShortcut}>
               <Ionicons name="analytics" size={18} color={COLORS.primary} />
               <Text style={styles.aiShortcutText}>Open AI Prediction</Text>
@@ -752,6 +801,23 @@ const styles = StyleSheet.create({
   },
   panel: {
     gap: SPACING.md,
+  },
+  predictiveCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 8,
+    padding: 12,
+  },
+  predictiveHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  predictiveTitle: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "900",
+    textTransform: "capitalize",
   },
   offlineCard: {
     backgroundColor: "#F3F4F6",

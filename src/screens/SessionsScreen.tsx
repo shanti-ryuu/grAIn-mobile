@@ -144,6 +144,7 @@ export function SessionsScreen() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<DeviceSummary | null>(null);
   const [grainType, setGrainType] = useState<(typeof grainTypes)[number]>("rice");
+  const [sessionMode, setSessionMode] = useState<"AUTO" | "MANUAL">("MANUAL");
   const [targetMoisture, setTargetMoisture] = useState(14);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [exportingSessionId, setExportingSessionId] = useState<string | null>(null);
@@ -195,7 +196,7 @@ export function SessionsScreen() {
 
     setIsSubmitting(true);
     try {
-      await startSession(selectedDevice.deviceId, grainType, targetMoisture);
+      await startSession(selectedDevice.deviceId, grainType, targetMoisture, sessionMode);
       setModalOpen(false);
     } catch {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -368,6 +369,30 @@ export function SessionsScreen() {
                 >
                   <Text style={[styles.modalChipText, { color: theme.textPrimary }, grainType === type && styles.modalChipTextActive]}>
                     {titleCase(type)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={[styles.modalLabel, { color: theme.textPrimary }]}>Drying Mode</Text>
+            <View style={styles.chipWrap}>
+              {(["MANUAL", "AUTO"] as const).map((item) => (
+                <Pressable
+                  key={item}
+                  onPress={() => setSessionMode(item)}
+                  style={[
+                    styles.modalChip,
+                    { backgroundColor: darkModalSurface, borderColor: darkBorder },
+                    sessionMode === item && { backgroundColor: theme.accentPrimary, borderColor: theme.accentPrimary },
+                  ]}
+                >
+                  <Ionicons
+                    name={item === "AUTO" ? "sparkles-outline" : "person-outline"}
+                    size={16}
+                    color={sessionMode === item ? "#FFFFFF" : theme.textSecondary}
+                  />
+                  <Text style={[styles.modalChipText, { color: theme.textPrimary }, sessionMode === item && styles.modalChipTextActive]}>
+                    {item === "AUTO" ? "AUTO AI" : "Manual"}
                   </Text>
                 </Pressable>
               ))}

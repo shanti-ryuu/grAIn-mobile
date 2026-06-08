@@ -6,21 +6,36 @@ import { useCallback, useEffect } from "react";
 import { Platform } from "react-native";
 
 import { grainApi } from "@/api/grain-api-client";
+import {
+  hasAnyNotificationPreferenceEnabled,
+  loadNotificationPreferences,
+} from "@/utils/notificationPreferences";
 
 const PUSH_TOKEN_KEY = "@grain_push_token";
 
 type NotificationData = {
   type?: string;
   deviceId?: string;
+  sessionId?: string;
 };
 
 function navigateFromData(data: NotificationData): void {
-  if (data.type === "drying_complete") {
+  if ((data.type === "drying_complete" || data.type === "session_milestone") && data.sessionId) {
+    router.push({ pathname: "/(app)/sessions", params: { sessionId: data.sessionId } } as never);
+    return;
+  }
+
+  if (data.type === "drying_complete" || data.type === "session_started" || data.type === "session_aborted") {
     router.push("/(app)/sessions");
     return;
   }
 
-  if ((data.type === "alert_critical" || data.type === "device_offline") && data.deviceId) {
+  if (data.type === "ai_action" || data.type === "predictive_control") {
+    router.push("/agent-logs" as never);
+    return;
+  }
+
+  if ((data.type === "alert_critical" || data.type === "alert_warning" || data.type === "device_offline") && data.deviceId) {
     router.push({ pathname: "/(app)/device/[id]", params: { id: data.deviceId } });
     return;
   }
@@ -51,6 +66,11 @@ export function usePushNotifications() {
   const registerForPushNotifications = useCallback(async () => {
     try {
       if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) {
+        return null;
+      }
+
+      const preferences = await loadNotificationPreferences();
+      if (!hasAnyNotificationPreferenceEnabled(preferences)) {
         return null;
       }
 

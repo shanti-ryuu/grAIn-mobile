@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
 import { BarChart, LineChart, PieChart } from "react-native-chart-kit";
 import { useMemo, useState } from "react";
 import {
@@ -15,11 +16,19 @@ import {
 } from "react-native";
 import Svg, { Circle, Line, Path, Polyline, Rect } from "react-native-svg";
 
-import { AnalyticsOverview, AnalyticsSessionRank, DeviceSummary, SessionSummary, grainApi } from "@/api/grain-api-client";
+import {
+  AnalyticsModeStats,
+  AnalyticsOverview,
+  AnalyticsSessionRank,
+  DeviceSummary,
+  GrainTypeAnalytics,
+  SessionSummary,
+  grainApi,
+} from "@/api/grain-api-client";
 import { Card } from "@/components/Card";
 import { EmptyState } from "@/components/EmptyState";
 import { useTheme } from "@/context/ThemeContext";
-import { useAnalytics } from "@/hooks/useAnalytics";
+import { useAnalytics, useAnalyticsCompare } from "@/hooks/useAnalytics";
 import { useDevices } from "@/hooks/useDevices";
 import { useDryingSessions } from "@/hooks/useDryingSessions";
 import { chartConfig } from "@/utils/chart";
@@ -44,7 +53,11 @@ const emptyAnalytics: AnalyticsOverview = {
   recentSessions: [],
   moistureTrend: [],
   energyTrend: [],
+  solarEfficiencyTrend: [],
+  grainTypeComparison: [],
 };
+
+const grainTypeFallbacks = ["rice", "corn", "wheat", "soybean", "coffee"];
 
 function labelDate(value?: string): string {
   if (!value) {
@@ -175,6 +188,112 @@ function RankCard({ title, session }: { title: string; session?: AnalyticsSessio
   );
 }
 
+function ComparisonMetric({ label, value }: { label: string; value: string | number }) {
+  const { theme } = useTheme();
+  return (
+    <View style={styles.compareMetric}>
+      <Text style={[styles.compareMetricLabel, { color: theme.textSecondary }]}>{label}</Text>
+      <Text style={[styles.compareMetricValue, { color: theme.textPrimary }]}>{value}</Text>
+    </View>
+  );
+}
+
+function ModeColumn({
+  title,
+  icon,
+  stats,
+  accent,
+}: {
+  title: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  stats: AnalyticsModeStats;
+  accent: string;
+}) {
+  const { theme } = useTheme();
+  return (
+    <View style={[styles.modeColumn, { backgroundColor: theme.bgElevated, borderColor: theme.border }]}>
+      <View style={styles.modeHeader}>
+        <View style={[styles.modeIcon, { backgroundColor: `${accent}22` }]}>
+          <Ionicons name={icon} size={17} color={accent} />
+        </View>
+        <Text style={[styles.modeTitle, { color: theme.textPrimary }]}>{title}</Text>
+      </View>
+      <ComparisonMetric label="Sessions" value={stats.sessionCount} />
+      <ComparisonMetric label="Avg Efficiency" value={`${stats.avgEfficiency.toFixed(1)}%`} />
+      <ComparisonMetric label="Avg Time" value={`${stats.avgDryingTime.toFixed(0)} min`} />
+      <ComparisonMetric label="Success Rate" value={`${stats.successRate.toFixed(1)}%`} />
+      <ComparisonMetric label="Over-drying" value={`${stats.overdryingIncidents} cases`} />
+    </View>
+  );
+}
+
+function AiVsManualCard({
+  comparison,
+  loading,
+  error,
+}: {
+  comparison?: ReturnType<typeof useAnalyticsCompare>["data"];
+  loading: boolean;
+  error?: string | null;
+}) {
+  const { theme } = useTheme();
+  const auto = comparison?.comparison.auto;
+  const manual = comparison?.comparison.manual;
+  const improvement = comparison?.comparison.improvement;
+
+  return (
+    <Card style={styles.card}>
+      <View style={styles.rowBetween}>
+        <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>AI vs Manual</Text>
+        {loading ? <ActivityIndicator color={COLORS.primary} /> : null}
+      </View>
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+      {auto && manual ? (
+        <>
+          <View style={styles.compareColumns}>
+            <ModeColumn title="AUTO (AI)" icon="sparkles-outline" stats={auto} accent={COLORS.success} />
+            <ModeColumn title="MANUAL" icon="person-outline" stats={manual} accent={COLORS.info} />
+          </View>
+          {manual.sessionCount === 0 ? (
+            <View style={[styles.comparisonEmpty, { backgroundColor: theme.bgElevated }]}>
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Run a manual session to compare.</Text>
+            </View>
+          ) : (
+            <View style={styles.highlightBox}>
+              <Ionicons name="trending-up-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.highlightText}>
+                AI saves {Math.max(0, improvement?.timeSaved ?? 0).toFixed(0)} min and is {(improvement?.efficiencyGain ?? 0).toFixed(1)}% more efficient.
+              </Text>
+            </View>
+          )}
+        </>
+      ) : (
+        <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Comparison data is loading.</Text>
+      )}
+    </Card>
+  );
+}
+
+function GrainTypeCard({ item, onPress }: { item: GrainTypeAnalytics; onPress: () => void }) {
+  const { theme } = useTheme();
+  return (
+    <Pressable onPress={onPress} style={[styles.grainCard, { backgroundColor: theme.bgCard, borderColor: theme.border }]}>
+      <View style={styles.grainHeader}>
+        <View style={[styles.grainIcon, { backgroundColor: theme.accentPrimarySubtle }]}>
+          <Ionicons name="leaf-outline" size={18} color={theme.accentPrimary} />
+        </View>
+        <Ionicons name="chevron-forward" size={17} color={theme.textTertiary} />
+      </View>
+      <Text style={[styles.grainTitle, { color: theme.textPrimary }]}>{item.grainType.charAt(0).toUpperCase() + item.grainType.slice(1)}</Text>
+      <Text style={[styles.grainMeta, { color: theme.textSecondary }]}>{item.sessionCount} sessions</Text>
+      <View style={styles.grainStats}>
+        <Text style={[styles.grainValue, { color: theme.textPrimary }]}>{item.avgEfficiency.toFixed(1)}%</Text>
+        <Text style={[styles.grainMeta, { color: theme.textSecondary }]}>{item.avgDryingTime.toFixed(0)} min avg</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 export function AnalyticsScreen() {
   const [period, setPeriod] = useState<Period>("daily");
   const [deviceId, setDeviceId] = useState<string | undefined>();
@@ -184,8 +303,10 @@ export function AnalyticsScreen() {
   const { devices } = useDevices();
   const { sessions } = useDryingSessions(deviceId);
   const analyticsQuery = useAnalytics(period, deviceId);
+  const compareQuery = useAnalyticsCompare(period === "daily" ? "weekly" : period, deviceId);
   const analytics = analyticsQuery.data ?? emptyAnalytics;
   const { theme } = useTheme();
+  const router = useRouter();
   const bottomPadding = useBottomTabPadding(32);
   const width = Dimensions.get("window").width - 32;
   const chartWidth = Math.max(280, width - SPACING.md * 2);
@@ -204,6 +325,8 @@ export function AnalyticsScreen() {
   const finalMoistureValues = analytics.moistureTrend.map((point) => point.avgFinalMoisture || point.avgMoisture || 0).slice(-6);
   const energyValues = analytics.energyTrend.map((point) => point.totalEnergy || 0).slice(-6);
   const energyLabels = analytics.energyTrend.map((point) => labelDate(point.date ?? point.timestamp)).slice(-6);
+  const solarValues = (analytics.solarEfficiencyTrend ?? []).map((point) => point.efficiencyScore || 0).slice(-6);
+  const solarLabels = (analytics.solarEfficiencyTrend ?? []).map((point) => labelDate(point.date ?? point.timestamp)).slice(-6);
   const efficiencyValues = (analytics.efficiencyTrend ?? []).map((point) => point.avgEfficiency || 0).slice(-6);
   const efficiencyLabels = (analytics.efficiencyTrend ?? []).map((point) => labelDate(point.date)).slice(-6);
   const breakdown = analytics.sessionBreakdown ?? {
@@ -222,6 +345,21 @@ export function AnalyticsScreen() {
   );
 
   const selectedDevice = devices.find((device) => device.deviceId === deviceId);
+  const grainTypeData = useMemo(() => {
+    const existing = analytics.grainTypeComparison ?? [];
+    const byType = new Map(existing.map((item) => [item.grainType, item]));
+    return grainTypeFallbacks.map((grainType) => (
+      byType.get(grainType) ?? {
+        grainType,
+        sessionCount: 0,
+        avgEfficiency: 0,
+        avgDryingTime: 0,
+        avgEnergyUsed: 0,
+        avgMoistureReduction: 0,
+        successRate: 0,
+      }
+    ));
+  }, [analytics.grainTypeComparison]);
 
   async function exportAnalytics() {
     setIsExportingAnalytics(true);
@@ -316,6 +454,26 @@ export function AnalyticsScreen() {
           <KpiCard icon="success" label="Success Rate" value={`${kpis.successRate.toFixed(1)}%`} />
         </View>
 
+        <AiVsManualCard comparison={compareQuery.data} error={compareQuery.error} loading={compareQuery.isLoading} />
+
+        <Card style={styles.card}>
+          <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>By Grain Type</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.grainScroll}>
+            {grainTypeData.map((item) => (
+              <GrainTypeCard
+                key={item.grainType}
+                item={item}
+                onPress={() =>
+                  router.push({
+                    pathname: "/(app)/grain-type/[type]",
+                    params: { type: item.grainType, period, deviceId: deviceId ?? "" },
+                  } as never)
+                }
+              />
+            ))}
+          </ScrollView>
+        </Card>
+
         <Card style={styles.card}>
           <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>Moisture Reduction Trend</Text>
           {startMoistureValues.some(Boolean) || finalMoistureValues.some(Boolean) ? (
@@ -358,6 +516,32 @@ export function AnalyticsScreen() {
             />
           ) : (
             <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No energy data yet.</Text>
+          )}
+        </Card>
+
+        <Card style={styles.card}>
+          <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>Solar Panel Efficiency Trend</Text>
+          {solarValues.some((value) => value > 0) ? (
+            <>
+              <LineChart
+                bezier
+                chartConfig={chartConfig(theme, COLORS.warning)}
+                data={{
+                  labels: solarLabels,
+                  datasets: [{ data: solarValues }],
+                }}
+                fromZero
+                height={200}
+                style={styles.chart}
+                width={chartWidth}
+                yAxisSuffix="%"
+              />
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                Based on average solar voltage versus an 18V expected panel output.
+              </Text>
+            </>
+          ) : (
+            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>No solar efficiency data yet.</Text>
           )}
         </Card>
 
@@ -447,6 +631,11 @@ const styles = StyleSheet.create({
   chart: { borderRadius: 14, marginLeft: -SPACING.md },
   closeButton: { alignItems: "center", paddingVertical: 12 },
   closeButtonText: { fontSize: 14, fontWeight: "900" },
+  compareColumns: { flexDirection: "row", gap: SPACING.sm },
+  compareMetric: { gap: 2 },
+  compareMetricLabel: { fontSize: 10, fontWeight: "900", letterSpacing: 0.2, textTransform: "uppercase" },
+  compareMetricValue: { fontSize: 14, fontWeight: "900" },
+  comparisonEmpty: { borderRadius: 14, padding: SPACING.md },
   container: { flex: 1 },
   content: { gap: SPACING.md, padding: SPACING.md, paddingTop: 0, paddingBottom: 120 },
   deviceChip: { borderRadius: 999, borderWidth: 1, marginRight: SPACING.sm, paddingHorizontal: SPACING.md, paddingVertical: 10 },
@@ -456,7 +645,17 @@ const styles = StyleSheet.create({
   errorText: { color: COLORS.danger, fontSize: 13, fontWeight: "800" },
   exportButton: { alignItems: "center", backgroundColor: COLORS.primary, borderRadius: 18, flexDirection: "row", gap: SPACING.sm, justifyContent: "center", paddingVertical: 16 },
   exportButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "900" },
+  grainCard: { borderRadius: 18, borderWidth: 0.5, gap: 6, marginRight: SPACING.sm, minHeight: 154, padding: SPACING.md, width: 148 },
+  grainHeader: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
+  grainIcon: { alignItems: "center", borderRadius: 13, height: 38, justifyContent: "center", width: 38 },
+  grainMeta: { fontSize: 12, fontWeight: "800" },
+  grainScroll: { paddingRight: SPACING.sm },
+  grainStats: { gap: 2, marginTop: "auto" },
+  grainTitle: { fontSize: 17, fontWeight: "900" },
+  grainValue: { fontSize: 22, fontWeight: "900" },
   header: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", padding: SPACING.md, paddingBottom: SPACING.sm },
+  highlightBox: { alignItems: "center", backgroundColor: COLORS.primary, borderRadius: 16, flexDirection: "row", gap: SPACING.sm, padding: SPACING.md },
+  highlightText: { color: "#FFFFFF", flex: 1, fontSize: 14, fontWeight: "900", lineHeight: 20 },
   kpiCard: { flexBasis: "48%", gap: 4, minHeight: 112 },
   kpiGrid: { flexDirection: "row", flexWrap: "wrap", gap: SPACING.sm },
   kpiIconBadge: { alignItems: "center", borderRadius: 14, height: 42, justifyContent: "center", marginBottom: 4, width: 42 },
@@ -468,6 +667,10 @@ const styles = StyleSheet.create({
   modalLabel: { fontSize: 13, fontWeight: "900", marginTop: SPACING.sm, textTransform: "uppercase" },
   modalSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, gap: SPACING.md, maxHeight: "82%", padding: SPACING.lg },
   modalTitle: { fontSize: 22, fontWeight: "900" },
+  modeColumn: { borderRadius: 16, borderWidth: 0.5, flex: 1, gap: 10, padding: SPACING.md },
+  modeHeader: { alignItems: "center", flexDirection: "row", gap: SPACING.xs },
+  modeIcon: { alignItems: "center", borderRadius: 999, height: 30, justifyContent: "center", width: 30 },
+  modeTitle: { flex: 1, fontSize: 13, fontWeight: "900" },
   periodChip: { alignItems: "center", borderRadius: 14, borderWidth: 1, flex: 1, paddingVertical: 11 },
   periodRow: { flexDirection: "row", gap: SPACING.sm },
   periodText: { fontSize: 13, fontWeight: "900" },
@@ -476,6 +679,7 @@ const styles = StyleSheet.create({
   rankRow: { flexDirection: "row", gap: SPACING.sm },
   rankText: { fontSize: 12, fontWeight: "700" },
   rankTitle: { fontSize: 15, fontWeight: "900" },
+  rowBetween: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
   sessionOption: { borderBottomWidth: 1, gap: 3, paddingVertical: 12 },
   sessionOptionMeta: { fontSize: 12, fontWeight: "700" },
   sessionOptionTitle: { fontSize: 14, fontWeight: "900" },

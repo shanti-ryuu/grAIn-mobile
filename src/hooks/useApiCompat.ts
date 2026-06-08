@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 
-import { grainApi, AlertSummary } from "@/api/grain-api-client";
-import { getListData, getPaginationTotal } from "@/utils/data";
+import { grainApi, NotificationSummary } from "@/api/grain-api-client";
+import { getListData } from "@/utils/data";
+import { loadNotificationPreferences, shouldShowNotification } from "@/utils/notificationPreferences";
 
 export function useUnreadNotificationCount(): number {
   const [count, setCount] = useState(0);
@@ -10,10 +11,14 @@ export function useUnreadNotificationCount(): number {
     let mounted = true;
     const load = async () => {
       try {
-        const response = await grainApi.alerts.getAll({ isRead: false, limit: 1 });
-        const alerts = getListData<AlertSummary>(response);
+        const [response, preferences] = await Promise.all([
+          grainApi.notifications.list({ unread: true, limit: 100 }),
+          loadNotificationPreferences(),
+        ]);
+        const alerts = getListData<NotificationSummary>(response)
+          .filter((notification) => shouldShowNotification(notification, preferences));
         if (mounted) {
-          setCount(getPaginationTotal(response, alerts.length));
+          setCount(alerts.length);
         }
       } catch {
         if (mounted) {

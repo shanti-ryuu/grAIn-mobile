@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { Link, router } from "expo-router";
-import { useState } from "react";
+import { Link, router, useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -16,15 +16,24 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { BrandLogo } from "@/components/BrandLogo";
 import { GrainApiError } from "@/api/grain-api-client";
+import { useToast } from "@/context/ToastContext";
 import { COLORS, SPACING } from "@/utils/constants";
 
 export function LoginScreen() {
+  const params = useLocalSearchParams<{ message?: string }>();
   const { login } = useAuth();
+  const { showToast } = useToast();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (typeof params.message === "string" && params.message) {
+      showToast(params.message, "success");
+    }
+  }, [params.message, showToast]);
 
   const submit = async () => {
     setIsSubmitting(true);
@@ -95,6 +104,14 @@ export function LoginScreen() {
           </Pressable>
         </View>
 
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.push("/forgot-password" as never)}
+          style={styles.forgotButton}
+        >
+          <Text style={styles.forgotLink}>Forgot password?</Text>
+        </Pressable>
+
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Pressable disabled={isSubmitting} onPress={submit} style={[styles.button, isSubmitting && styles.disabled]}>
@@ -144,6 +161,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: SPACING.sm,
     padding: SPACING.lg,
+  },
+  forgotLink: {
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  forgotButton: {
+    alignSelf: "flex-end",
   },
   input: {
     backgroundColor: "#FFFFFF",

@@ -14,11 +14,35 @@ import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { COLORS, SPACING } from "@/utils/constants";
 import { haptics } from "@/utils/haptics";
 import { useBottomTabPadding } from "@/utils/layout";
+import {
+  defaultNotificationPreferences,
+  loadNotificationPreferences,
+  NotificationPreferenceKey,
+  NotificationPreferences,
+  saveNotificationPreferences,
+} from "@/utils/notificationPreferences";
 import Animated, { useAnimatedStyle, useSharedValue, withSequence, withTiming } from "react-native-reanimated";
 
 const APP_LANG_KEY = "@grain_app_lang";
 const CHAT_LANG_KEY = "@grain_chat_lang";
 const CRITICAL_ALERTS_KEY = "@grain_critical_alerts";
+
+const notificationPreferenceRows: {
+  key: NotificationPreferenceKey;
+  label: string;
+  description: string;
+}[] = [
+  { key: "dryingComplete", label: "Drying Complete alerts", description: "Notify when a dryer reaches target moisture." },
+  { key: "criticalTemperature", label: "Critical temperature alerts", description: "High heat and emergency warnings." },
+  { key: "highHumidity", label: "High humidity warnings", description: "Humidity conditions that slow drying." },
+  { key: "lowMoisture", label: "Low moisture warnings", description: "Moisture threshold and quality alerts." },
+  { key: "deviceOffline", label: "Device offline alerts", description: "When a dryer loses connection." },
+  { key: "sessionStarted", label: "Session started", description: "Notify when a drying run begins." },
+  { key: "sessionAborted", label: "Session aborted", description: "Notify when a drying run stops early." },
+  { key: "aiAutoControl", label: "AI auto-control actions", description: "Assistant and predictive-control commands." },
+  { key: "dryingMilestones", label: "Drying milestones 50%/75%/90%", description: "Progress updates during active drying." },
+  { key: "weatherWarnings", label: "Weather warnings", description: "Outdoor weather advisories for drying." },
+];
 
 export function SettingsScreen() {
   const { user } = useAuth();
@@ -29,22 +53,26 @@ export function SettingsScreen() {
   const [language, setLanguage] = useState<"EN" | "FIL">("EN");
   const [pushEnabled, setPushEnabled] = useState(false);
   const [criticalAlerts, setCriticalAlerts] = useState(true);
+  const [notificationPreferences, setNotificationPreferences] =
+    useState<NotificationPreferences>(defaultNotificationPreferences);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const bottomPadding = useBottomTabPadding(32);
   const flash = useSharedValue(0);
 
   useEffect(() => {
     const loadSettings = async () => {
-      const [savedLang, pushToken, criticalValue] = await Promise.all([
+      const [savedLang, pushToken, criticalValue, savedNotificationPreferences] = await Promise.all([
         AsyncStorage.getItem(APP_LANG_KEY),
         AsyncStorage.getItem("@grain_push_token"),
         AsyncStorage.getItem(CRITICAL_ALERTS_KEY),
+        loadNotificationPreferences(),
       ]);
       if (savedLang === "EN" || savedLang === "FIL") {
         setLanguage(savedLang);
       }
       setPushEnabled(Boolean(pushToken));
       setCriticalAlerts(criticalValue !== "false");
+      setNotificationPreferences(savedNotificationPreferences);
     };
 
     void loadSettings();
@@ -78,6 +106,12 @@ export function SettingsScreen() {
   const toggleCriticalAlerts = async (enabled: boolean) => {
     setCriticalAlerts(enabled);
     await AsyncStorage.setItem(CRITICAL_ALERTS_KEY, String(enabled));
+  };
+
+  const toggleNotificationPreference = async (key: NotificationPreferenceKey, enabled: boolean) => {
+    const nextPreferences = { ...notificationPreferences, [key]: enabled };
+    setNotificationPreferences(nextPreferences);
+    await saveNotificationPreferences(nextPreferences);
   };
 
   const flashStyle = useAnimatedStyle(() => ({
@@ -164,6 +198,19 @@ export function SettingsScreen() {
       </Card>
 
       <Card style={styles.card}>
+        <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Notification Preferences</Text>
+        {notificationPreferenceRows.map((item) => (
+          <SettingSwitch
+            description={item.description}
+            key={item.key}
+            label={item.label}
+            value={notificationPreferences[item.key]}
+            onValueChange={(enabled) => void toggleNotificationPreference(item.key, enabled)}
+          />
+        ))}
+      </Card>
+
+      <Card style={styles.card}>
         <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>About</Text>
         <InfoLine label="App version" value="grAIn v1.0.0" />
         <InfoLine label="System" value="AI-Assisted IoT Solar-Powered Rice Grain Dryer" />
@@ -220,17 +267,22 @@ function ThemeSwitch({ isDark, onToggle }: { isDark: boolean; onToggle: () => vo
 
 function SettingSwitch({
   label,
+  description,
   value,
   onValueChange,
 }: {
   label: string;
+  description?: string;
   value: boolean;
   onValueChange: (value: boolean) => void;
 }) {
   const { theme } = useTheme();
   return (
     <View style={styles.statusRow}>
-      <Text style={[styles.rowTitle, { color: theme.textPrimary }]}>{label}</Text>
+      <View style={styles.settingTextBlock}>
+        <Text style={[styles.rowTitle, { color: theme.textPrimary }]}>{label}</Text>
+        {description ? <Text style={[styles.rowSubtitle, { color: theme.textSecondary }]}>{description}</Text> : null}
+      </View>
       <Switch
         onValueChange={onValueChange}
         thumbColor={value ? COLORS.primary : "#F4F4F5"}
@@ -333,7 +385,6 @@ const styles = StyleSheet.create({
   },
   rowTitle: {
     color: COLORS.textPrimary,
-    flex: 1,
     fontSize: 14,
     fontWeight: "900",
   },
@@ -345,6 +396,7 @@ const styles = StyleSheet.create({
   statusRow: {
     alignItems: "center",
     flexDirection: "row",
+    gap: SPACING.md,
     justifyContent: "space-between",
   },
   statusText: {
@@ -377,6 +429,10 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: 13,
     fontWeight: "600",
+  },
+  settingTextBlock: {
+    flex: 1,
+    gap: 2,
   },
   title: {
     color: COLORS.textPrimary,

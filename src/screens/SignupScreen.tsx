@@ -18,6 +18,36 @@ import { BrandLogo } from "@/components/BrandLogo";
 import { useAuth } from "@/context/AuthContext";
 import { COLORS, SPACING } from "@/utils/constants";
 
+type PasswordStrength = {
+  label: string;
+  score: number;
+  color: string;
+};
+
+function getPasswordStrength(password: string): PasswordStrength {
+  const checks = [
+    password.length >= 8,
+    /\d/.test(password),
+    /[A-Z]/.test(password),
+    /[^A-Za-z0-9]/.test(password),
+  ];
+  const score = checks.filter(Boolean).length;
+
+  if (!password) {
+    return { label: "Use at least 8 characters with a number", score: 0, color: "#CBD5C0" };
+  }
+
+  if (score <= 1) {
+    return { label: "Weak password", score: 1, color: COLORS.danger };
+  }
+
+  if (score <= 3) {
+    return { label: "Good password", score, color: "#D97706" };
+  }
+
+  return { label: "Strong password", score: 4, color: COLORS.primary };
+}
+
 export function SignupScreen() {
   const { signup } = useAuth();
   const [name, setName] = useState("");
@@ -28,6 +58,7 @@ export function SignupScreen() {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const passwordStrength = getPasswordStrength(password);
 
   const submit = async () => {
     setIsSubmitting(true);
@@ -144,6 +175,20 @@ export function SignupScreen() {
               <Ionicons color={COLORS.textSecondary} name={passwordVisible ? "eye-off" : "eye"} size={22} />
             </Pressable>
           </View>
+          <View accessibilityLabel={`Password strength: ${passwordStrength.label}`} style={styles.strengthWrap}>
+            {[0, 1, 2, 3].map((index) => (
+              <View
+                key={index}
+                style={[
+                  styles.strengthSegment,
+                  {
+                    backgroundColor: index < passwordStrength.score ? passwordStrength.color : "#E5EDE1",
+                  },
+                ]}
+              />
+            ))}
+          </View>
+          <Text style={[styles.strengthText, { color: passwordStrength.color }]}>{passwordStrength.label}</Text>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -271,6 +316,20 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 0,
     width: 52,
+  },
+  strengthSegment: {
+    borderRadius: 999,
+    flex: 1,
+    height: 6,
+  },
+  strengthText: {
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: -4,
+  },
+  strengthWrap: {
+    flexDirection: "row",
+    gap: 6,
   },
   subtitle: {
     color: COLORS.textSecondary,

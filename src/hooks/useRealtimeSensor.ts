@@ -19,7 +19,17 @@ export interface RealtimeSensorData {
   updatedAt?: string;
 }
 
-export type RuntimeState = Record<string, string | number | boolean | null | undefined>;
+export type PredictiveControlState = {
+  enabled?: boolean;
+  status?: "idle" | "cooldown" | "action_sent" | "maintaining";
+  lastAction?: "STOP" | "EMERGENCY_STOP" | "REDUCE_TEMP" | "INCREASE_FAN" | "MAINTAIN";
+  lastActionAt?: string;
+  nextAllowedAt?: string;
+  reason?: string;
+  commandId?: string;
+};
+
+export type RuntimeState = Record<string, string | number | boolean | null | undefined | PredictiveControlState>;
 
 interface UseRealtimeSensorResult {
   sensorData: RealtimeSensorData;
@@ -88,7 +98,18 @@ function normalizeRuntimeState(value: unknown): RuntimeState {
     stepperState: stateValue(data.stepperState, "OFF"),
     currentMode: stateValue(data.currentMode, "MANUAL"),
     isRunning: data.isRunning === true,
+    predictiveControl:
+      data.predictiveControl && typeof data.predictiveControl === "object"
+        ? (data.predictiveControl as PredictiveControlState)
+        : undefined,
   };
+}
+
+function normalizePredictiveControl(value: unknown): PredictiveControlState | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  return value as PredictiveControlState;
 }
 
 function parseLastActive(value: unknown): number | null {
@@ -152,6 +173,7 @@ export function useRealtimeSensor(deviceId?: string | null): UseRealtimeSensorRe
     const sensorRef = ref(db, `grain/devices/${deviceId}/sensors`);
     const statusRef = ref(db, `grain/devices/${deviceId}/status`);
     const runtimeRef = ref(db, `grain/devices/${deviceId}/runtimeState`);
+    const predictiveControlRef = ref(db, `grain/devices/${deviceId}/predictiveControl`);
     const lastActiveRef = ref(db, `grain/devices/${deviceId}/lastActive`);
 
     const unsubscribeSensor = onValue(sensorRef, (snapshot) => {
@@ -170,6 +192,11 @@ export function useRealtimeSensor(deviceId?: string | null): UseRealtimeSensorRe
       setRuntimeState(normalizeRuntimeState(snapshot.val()));
     });
 
+    const unsubscribePredictiveControl = onValue(predictiveControlRef, (snapshot) => {
+      const predictiveControl = normalizePredictiveControl(snapshot.val());
+      setRuntimeState((current) => ({ ...current, predictiveControl }));
+    });
+
     const unsubscribeLastActive = onValue(lastActiveRef, (snapshot) => {
       const value = snapshot.val();
       const parsed = parseLastActive(value);
@@ -181,6 +208,7 @@ export function useRealtimeSensor(deviceId?: string | null): UseRealtimeSensorRe
       unsubscribeSensor();
       unsubscribeStatus();
       unsubscribeRuntime();
+      unsubscribePredictiveControl();
       unsubscribeLastActive();
     };
   }, [deviceId]);

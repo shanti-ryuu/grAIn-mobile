@@ -121,6 +121,31 @@ function buildDailyRows(weather: WeatherData) {
   });
 }
 
+function buildPlanningWindows(weather: WeatherData) {
+  return weather.forecast
+    .map((item) => {
+      const humidityScore = Math.max(0, 100 - item.humidity);
+      const rainScore = Math.max(0, 100 - item.rainProbability * 100);
+      const windScore = Math.min(100, item.windSpeed * 25);
+      const score = Math.round(humidityScore * 0.45 + rainScore * 0.35 + windScore * 0.2);
+      const suitable = item.humidity < 75 && item.rainProbability < 0.25 && item.windSpeed > 0.5;
+      return {
+        ...item,
+        score,
+        suitable,
+        advice: suitable
+          ? "Good window for drying. Keep normal fan settings and monitor moisture."
+          : item.humidity >= 80
+            ? "Humidity is high. Prefer indoor drying or raise fan speed."
+            : item.rainProbability >= 0.25
+              ? "Rain risk is elevated. Avoid outdoor-dependent solar planning."
+              : "Marginal airflow. Monitor fan performance closely."
+      };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+}
+
 function FrostedPanel({ children, style }: { children: React.ReactNode; style?: object }) {
   const { isDark } = useTheme();
   return (
@@ -147,6 +172,7 @@ export function WeatherDetailScreen() {
   const bottomPadding = useBottomTabPadding(24);
   const { weather, loading, error, permissionStatus, refetch } = useWeather(true);
   const dailyRows = weather ? buildDailyRows(weather) : [];
+  const planningWindows = weather ? buildPlanningWindows(weather) : [];
   const accentText = isDark ? theme.accentPrimaryLight : "rgba(255,255,255,0.84)";
 
   return (
@@ -207,6 +233,30 @@ export function WeatherDetailScreen() {
                 <Text style={styles.panelTitle}>Drying conditions</Text>
               </View>
               <Text style={styles.adviceText}>{weather.dryingAdvice.recommendation}</Text>
+            </FrostedPanel>
+
+            <FrostedPanel>
+              <View style={styles.panelHeader}>
+                <Ionicons name="calendar-outline" size={18} color={accentText} />
+                <Text style={styles.panelTitle}>Forecast planning</Text>
+              </View>
+              <Text style={styles.adviceText}>
+                Best upcoming drying windows based on humidity, rain risk, and airflow.
+              </Text>
+              <View style={styles.plannerList}>
+                {planningWindows.map((item) => (
+                  <View key={`plan-${item.datetime}`} style={styles.plannerRow}>
+                    <View style={styles.plannerTime}>
+                      <Text style={styles.plannerHour}>{formatHour(item.datetime)}</Text>
+                      <Text style={styles.plannerScore}>{item.score}/100</Text>
+                    </View>
+                    <View style={styles.plannerBody}>
+                      <Text style={styles.plannerTitle}>{item.suitable ? "Recommended" : "Use caution"}</Text>
+                      <Text style={styles.plannerText}>{item.advice}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
             </FrostedPanel>
 
             <FrostedPanel>
@@ -467,6 +517,46 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.4,
     textTransform: "uppercase",
+  },
+  plannerBody: {
+    flex: 1,
+    gap: 3,
+  },
+  plannerHour: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  plannerList: {
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+  },
+  plannerRow: {
+    alignItems: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 18,
+    flexDirection: "row",
+    gap: SPACING.md,
+    padding: SPACING.md,
+  },
+  plannerScore: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  plannerText: {
+    color: "rgba(255,255,255,0.78)",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
+  },
+  plannerTime: {
+    width: 72,
+  },
+  plannerTitle: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "900",
   },
   root: {
     flex: 1,
